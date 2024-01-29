@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.0.0)
 project(MDNCPP VERSION 0.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED YES)
 
 include(CTest)
 enable_testing()
@@ -15,6 +16,7 @@ set(ADIOS2_DIR /home/kein/repos/ADIOS2_bi/build)
 find_package(MPI REQUIRED)
 find_package(OpenMP REQUIRED)
 find_package(ADIOS2 REQUIRED)
+find_package(GSL REQUIRED)
 
 if(NOT TARGET MPI::MPI_CXX)
     add_library(MPI::MPI_CXX IMPORTED INTERFACE)
@@ -101,29 +103,63 @@ ExternalProject_Add(json
     -DJSON_BuildTests=OFF
 )
 
+ExternalProject_Add(xtl
+    PREFIX xtl
+    SOURCE_DIR ${PROJECT_SOURCE_DIR}/lib/xtl
+    CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+    -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
+    -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
+    -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
+    -DCMAKE_INSTALL_PREFIX=${STAGING_DIR}
+    -DBUILD_SHARED_LIBS=OFF
+    -DBUILD_TESTING=OFF
+)
+
+ExternalProject_Add(xtensor
+    PREFIX xtensor
+    SOURCE_DIR ${PROJECT_SOURCE_DIR}/lib/xtensor
+    CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+    -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
+    -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
+    -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
+    -DCMAKE_INSTALL_PREFIX=${STAGING_DIR}
+    -DBUILD_SHARED_LIBS=OFF
+    -DBUILD_TESTING=OFF
+)
+
 include_directories(${PROJECT_SOURCE_DIR}/lib/spdlog/include)
 include_directories(${PROJECT_SOURCE_DIR}/lib/argparse/include)
 # include_directories(${PROJECT_SOURCE_DIR}/lib/adios2/bindings)
 include_directories(${PROJECT_SOURCE_DIR}/lib/json/include)
+include_directories(${PROJECT_SOURCE_DIR}/lib/yas/include)
+include_directories(${PROJECT_SOURCE_DIR}/lib/xtensor/include)
+include_directories(${PROJECT_SOURCE_DIR}/lib/xtl/include)
 include_directories(${ADIOS2_DIR})
 # include_directories(${STAGING_DIR}/include)
 
 add_executable(MDNCPP ${PROJECT_SOURCE_DIR}/src/MDNCPP.cpp)
 add_executable(AWTest ${PROJECT_SOURCE_DIR}/tests/ADIOS_writer.cpp)
+add_executable(HTRead ${PROJECT_SOURCE_DIR}/tests/ADIOS_HT_reader.cpp)
 
 # message(STATUS "Run: ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} ${MPIEXEC_MAX_NUMPROCS} ${MPIEXEC_PREFLAGS} EXECUTABLE ${MPIEXEC_POSTFLAGS} ARGS")
 target_link_libraries(MDNCPP PUBLIC MPI::MPI_CXX)
 target_link_libraries(MDNCPP PUBLIC OpenMP::OpenMP_CXX)
 target_link_libraries(MDNCPP PRIVATE adios2::cxx11_mpi MPI::MPI_C)
+target_link_libraries(MDNCPP PUBLIC GSL::gsl GSL::gslcblas)
 
 target_link_libraries(AWTest PUBLIC MPI::MPI_CXX)
 target_link_libraries(AWTest PUBLIC OpenMP::OpenMP_CXX)
 target_link_libraries(AWTest PRIVATE adios2::cxx11_mpi MPI::MPI_C)
 
+target_link_libraries(HTRead PUBLIC MPI::MPI_CXX)
+target_link_libraries(HTRead PUBLIC OpenMP::OpenMP_CXX)
+target_link_libraries(HTRead PRIVATE adios2::cxx11_mpi MPI::MPI_C)
+
 add_dependencies(${PROJECT_NAME} spdlog)
 add_dependencies(${PROJECT_NAME} argparse)
-# add_dependencies(${PROJECT_NAME} adios2)
 add_dependencies(${PROJECT_NAME} json)
+add_dependencies(${PROJECT_NAME} xtl)
+add_dependencies(${PROJECT_NAME} xtensor)
 
 add_dependencies(AWTest spdlog)
 add_dependencies(AWTest argparse)

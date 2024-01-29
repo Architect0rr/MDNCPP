@@ -1,6 +1,8 @@
 #ifndef __MDN_constants__
 #define __MDN_constants__
 
+#include <string>
+
 namespace mdn::cs
 {
     constexpr const int mpi_root = 0;
@@ -19,6 +21,8 @@ namespace mdn::fields
 }
 namespace mdn::lcf
 {
+    constexpr const std::string_view timestep("ntimestep");
+    constexpr const std::string_view atoms("atoms");
     constexpr const std::string_view natoms("natoms");
     constexpr const std::string_view boxxhi("boxxhi");
     constexpr const std::string_view boxyhi("boxyhi");
