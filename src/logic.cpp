@@ -4,6 +4,8 @@
 #include "adios2.h"
 #include <xtensor/xarray.hpp>
 #include <xtensor/xadapt.hpp>
+#include <xtensor/xview.hpp>
+#include <xtensor/xsort.hpp>
 
 #include "mpi.h"
 
@@ -52,12 +54,7 @@ namespace mdn::logic
         for (const auto &[storage, steps] : storages)
         {
             adios2::Engine reader = lmpio.Open(ws, adios2::Mode::Read, MPI_COMM_SELF);
-            uint64_t currentStep = 0;
-            while (steps.first != currentStep && reader.BeginStep() != adios2::StepStatus::EndOfStream)
-            {
-                currentStep = reader.CurrentStep();
-                reader.EndStep();
-            }
+
             adios2::Variable<uint64_t> varNstep = lmpio.InquireVariable<uint64_t>(std::string(lcf::timestep));
             adios2::Variable<uint64_t> varNatoms = lmpio.InquireVariable<uint64_t>(std::string(lcf::natoms));
             adios2::Variable<double> varBoxxhi = lmpio.InquireVariable<double>(std::string(lcf::boxxhi));
@@ -69,6 +66,14 @@ namespace mdn::logic
             // id c_clusters mass vx vy vz x y z
             adios2::Variable<double> varAtoms = lmpio.InquireVariable<double>(std::string(lcf::atoms));
 
+            uint64_t currentStep = 0;
+            while (steps.first != currentStep && reader.BeginStep() != adios2::StepStatus::EndOfStream)
+            {
+                currentStep = reader.CurrentStep();
+                reader.EndStep();
+            }
+
+            reader.Get(varNstep, timestep);
             reader.Get(varNatoms, Natoms);
             reader.Get(varBoxxhi, boxxhi);
             reader.Get(varBoxyhi, boxyhi);
@@ -81,6 +86,13 @@ namespace mdn::logic
             rho = Natoms / Volume;
 
             auto Atoms = xt::adapt_smart_ptr(Atoms_buf, rightshape);
+
+            auto particle_ids = xt::view(Atoms, xt::all(), xt::keep(0));
+            auto cluster_ids = xt::view(Atoms, xt::all(), xt::keep(1));
+            auto particle_masses = xt::view(Atoms, xt::all(), xt::keep(2));
+            auto velocities = xt::sqrt(xt::sum(xt::pow(xt::view(Atoms, xt::all(), xt::range(3, 6)), 2), {1}));
+
+            auto c0 = xt::concatenate(xt::xtuple(cluster_ids, particle_ids));
 
             reader.Close();
         }
