@@ -12,6 +12,7 @@ set(CMAKE_STAGING_PREFIX ${PROJECT_SOURCE_DIR}/build/stage)
 set(STAGING_DIR ${PROJECT_SOURCE_DIR}/build/stage)
 # set(CMAKE_C_COMPILER /usr/bin/gcc-11)
 # set(ADIOS2_DIR /home/kein/repos/ADIOS2_bi/build)
+set(CMAKE_CXX_FLAGS "-O3")
 
 find_package(MPI REQUIRED)
 find_package(OpenMP REQUIRED)
@@ -125,6 +126,7 @@ include_directories(${ADIOS2_DIR})
 add_dependencies(xtensor xtl)
 
 add_executable(MDNCPP ${PROJECT_SOURCE_DIR}/src/MDNCPP.cpp)
+add_executable(TMP ${PROJECT_SOURCE_DIR}/tests/tmp.cpp)
 # add_executable(AWTest ${PROJECT_SOURCE_DIR}/tests/ADIOS_writer.cpp)
 # add_executable(HTRead ${PROJECT_SOURCE_DIR}/tests/ADIOS_HT_reader.cpp)
 
@@ -146,6 +148,9 @@ add_dependencies(${PROJECT_NAME} argparse)
 add_dependencies(${PROJECT_NAME} json)
 add_dependencies(${PROJECT_NAME} xtl)
 add_dependencies(${PROJECT_NAME} xtensor)
+
+add_dependencies(TMP xtl)
+add_dependencies(TMP xtensor)
 
 # add_dependencies(AWTest spdlog)
 # add_dependencies(AWTest argparse)
