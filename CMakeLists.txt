@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.0.0)
 project(MDNCPP VERSION 0.1.0 LANGUAGES C CXX)
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 
 include(CTest)
@@ -9,10 +9,9 @@ enable_testing()
 include(ExternalProject)
 
 set(CMAKE_STAGING_PREFIX ${PROJECT_SOURCE_DIR}/build/stage)
-set(STAGING_DIR ${PROJECT_SOURCE_DIR}/build/stage)
-# set(CMAKE_C_COMPILER /usr/bin/gcc-11)
-# set(ADIOS2_DIR /home/kein/repos/ADIOS2_bi/build)
-set(CMAKE_CXX_FLAGS "-O3")
+
+set(CMAKE_CXX_FLAGS_Release "-O3")
+set(CMAKE_CXX_FLAGS_DEBUG "-Wall")
 
 find_package(MPI REQUIRED)
 find_package(OpenMP REQUIRED)
@@ -45,7 +44,7 @@ ExternalProject_Add(spdlog
     SOURCE_DIR ${PROJECT_SOURCE_DIR}/lib/spdlog
     CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
     -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
-    -DCMAKE_INSTALL_PREFIX=${STAGING_DIR}
+    -DCMAKE_INSTALL_PREFIX=${CMAKE_STAGING_PREFIX}
     -DSPDLOG_BUILD_SHARED=OFF
 )
 
@@ -54,7 +53,7 @@ ExternalProject_Add(argparse
     SOURCE_DIR ${PROJECT_SOURCE_DIR}/lib/argparse
     CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
     -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
-    -DCMAKE_INSTALL_PREFIX=${STAGING_DIR}
+    -DCMAKE_INSTALL_PREFIX=${CMAKE_STAGING_PREFIX}
     -DBUILD_SHARED_LIBS=OFF
     -DARGPARSE_BUILD_SAMPLES=OFF
     -DARGPARSE_BUILD_TESTS=OFF
@@ -67,7 +66,7 @@ ExternalProject_Add(argparse
 #     -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
 #     -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
 #     -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
-#     -DCMAKE_INSTALL_PREFIX=${STAGING_DIR}
+#     -DCMAKE_INSTALL_PREFIX=${CMAKE_STAGING_PREFIX}
 #     -DBUILD_SHARED_LIBS=OFF
 #     -DADIOS2_BUILD_EXAMPLES=OFF
 #     -DBUILD_TESTING=OFF
@@ -91,70 +90,28 @@ ExternalProject_Add(json
     SOURCE_DIR ${PROJECT_SOURCE_DIR}/lib/json
     CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
     -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
-    -DCMAKE_INSTALL_PREFIX=${STAGING_DIR}
+    -DCMAKE_INSTALL_PREFIX=${CMAKE_STAGING_PREFIX}
     -DBUILD_SHARED_LIBS=OFF
     -DJSON_BuildTests=OFF
-)
-
-ExternalProject_Add(xtl
-    PREFIX xtl
-    SOURCE_DIR ${PROJECT_SOURCE_DIR}/lib/xtl
-    CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
-    -DCMAKE_INSTALL_PREFIX=${STAGING_DIR}
-    -DBUILD_SHARED_LIBS=OFF
-    -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
-    -DBUILD_TESTING=OFF
-)
-
-ExternalProject_Add(xtensor
-    PREFIX xtensor
-    SOURCE_DIR ${PROJECT_SOURCE_DIR}/lib/xtensor
-    CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
-    -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
-    -DCMAKE_INSTALL_PREFIX=${STAGING_DIR}
-    -DBUILD_SHARED_LIBS=OFF
 )
 
 include_directories(${PROJECT_SOURCE_DIR}/lib/spdlog/include)
 include_directories(${PROJECT_SOURCE_DIR}/lib/argparse/include)
 include_directories(${PROJECT_SOURCE_DIR}/lib/json/include)
 include_directories(${PROJECT_SOURCE_DIR}/lib/yas/include)
-include_directories(${PROJECT_SOURCE_DIR}/lib/xtensor/include)
-include_directories(${PROJECT_SOURCE_DIR}/lib/xtl/include)
 include_directories(${ADIOS2_DIR})
 
-add_dependencies(xtensor xtl)
 
-add_executable(MDNCPP ${PROJECT_SOURCE_DIR}/src/MDNCPP.cpp)
-add_executable(TMP ${PROJECT_SOURCE_DIR}/tests/tmp.cpp)
-# add_executable(AWTest ${PROJECT_SOURCE_DIR}/tests/ADIOS_writer.cpp)
-# add_executable(HTRead ${PROJECT_SOURCE_DIR}/tests/ADIOS_HT_reader.cpp)
+add_executable(${PROJECT_NAME} ${PROJECT_SOURCE_DIR}/src/MDNCPP.cpp)
 
-# message(STATUS "Run: ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} ${MPIEXEC_MAX_NUMPROCS} ${MPIEXEC_PREFLAGS} EXECUTABLE ${MPIEXEC_POSTFLAGS} ARGS")
-target_link_libraries(MDNCPP PUBLIC MPI::MPI_CXX)
-target_link_libraries(MDNCPP PUBLIC OpenMP::OpenMP_CXX)
-target_link_libraries(MDNCPP PRIVATE adios2::cxx11_mpi MPI::MPI_C)
-
-# target_link_libraries(AWTest PUBLIC MPI::MPI_CXX)
-# target_link_libraries(AWTest PUBLIC OpenMP::OpenMP_CXX)
-# target_link_libraries(AWTest PRIVATE adios2::cxx11_mpi MPI::MPI_C)
-
-# target_link_libraries(HTRead PUBLIC MPI::MPI_CXX)
-# target_link_libraries(HTRead PUBLIC OpenMP::OpenMP_CXX)
-# target_link_libraries(HTRead PRIVATE adios2::cxx11_mpi MPI::MPI_C)
+target_link_libraries(${PROJECT_NAME} PUBLIC MPI::MPI_CXX)
+target_link_libraries(${PROJECT_NAME} PUBLIC OpenMP::OpenMP_CXX)
+target_link_libraries(${PROJECT_NAME} PRIVATE adios2::cxx11_mpi MPI::MPI_C)
 
 add_dependencies(${PROJECT_NAME} spdlog)
 add_dependencies(${PROJECT_NAME} argparse)
 add_dependencies(${PROJECT_NAME} json)
-add_dependencies(${PROJECT_NAME} xtl)
-add_dependencies(${PROJECT_NAME} xtensor)
 
-add_dependencies(TMP xtl)
-add_dependencies(TMP xtensor)
-
-# add_dependencies(AWTest spdlog)
-# add_dependencies(AWTest argparse)
-# add_dependencies(AWTest json)
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})

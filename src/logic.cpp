@@ -1,18 +1,21 @@
 #ifndef __MDN_LOGIC__
 #define __MDN_LOGIC__
 
+#include <span>
+#include <version>
+#include <filesystem>
+#include <unordered_set>
+
 #include "adios2.h"
-#include <xtensor/xarray.hpp>
-#include <xtensor/xadapt.hpp>
-#include <xtensor/xview.hpp>
-#include <xtensor/xsort.hpp>
-
 #include "mpi.h"
-
 #include "utils.cpp"
 #include "constants.cpp"
 
-#include <filesystem>
+#ifdef __cpp_lib_ranges_zip
+    #include <ranges>
+#else
+    #include "zip.cpp"
+#endif // !__cpp_lib_ranges_zip
 
 namespace mdn::logic
 {
@@ -20,81 +23,168 @@ namespace mdn::logic
     RETURN_CODES run(utils::MC &sts, const fs::path &ws, const std::map<fs::path, std::pair<int, int>> &storages, const uint64_t _Natoms)
     {
         adios2::ADIOS adios = adios2::ADIOS(MPI_COMM_SELF);
-        adios2::IO dataio = adios.DeclareIO("DATAWRITER");
-        adios2::IO lmpio = adios.DeclareIO("LAMMPSReader");
+        adios2::IO dataio   = adios.DeclareIO("DATAWRITER");
+        adios2::IO lmpsio   = adios.DeclareIO("LAMMPSReader");
         dataio.SetEngine("BP5");
-        lmpio.SetEngine("BP5");
+        lmpsio.SetEngine("BP5");
 
         adios2::Engine writer = dataio.Open(ws, adios2::Mode::Write, MPI_COMM_SELF);
 
         adios2::Variable<uint64_t> varFloats = dataio.DefineVariable<uint64_t>("ntimestep");
-        adios2::Variable<double> varTTemp = dataio.DefineVariable<double>("total_temp", {_Natoms}, {0}, {_Natoms}, adios2::ConstantDims);
-        adios2::Variable<double> varSizes = dataio.DefineVariable<double>("sizes", {_Natoms}, {0}, {_Natoms}, adios2::ConstantDims);
-        adios2::Variable<double> varDist = dataio.DefineVariable<double>("dist", {_Natoms}, {0}, {_Natoms}, adios2::ConstantDims);
-        adios2::Variable<double> varSCnt = dataio.DefineVariable<double>("scnt", {_Natoms}, {0}, {_Natoms}, adios2::ConstantDims);
-        adios2::Variable<double> varTemps = dataio.DefineVariable<double>("temps", {_Natoms}, {0}, {_Natoms}, adios2::ConstantDims);
+        adios2::Variable<double>   varTTemp  = dataio.DefineVariable<double>("total_temp", {_Natoms}, {0}, {_Natoms}, adios2::ConstantDims);
+        adios2::Variable<double>   varSizes  = dataio.DefineVariable<double>("sizes",      {_Natoms}, {0}, {_Natoms}, adios2::ConstantDims);
+        adios2::Variable<double>   varDist   = dataio.DefineVariable<double>("dist",       {_Natoms}, {0}, {_Natoms}, adios2::ConstantDims);
+        adios2::Variable<double>   varSCnt   = dataio.DefineVariable<double>("scnt",       {_Natoms}, {0}, {_Natoms}, adios2::ConstantDims);
+        adios2::Variable<double>   varTemps  = dataio.DefineVariable<double>("temps",      {_Natoms}, {0}, {_Natoms}, adios2::ConstantDims);
 
-        uint64_t timestep{};
-        uint64_t Natoms{};
-        double boxxhi{};
-        double boxyhi{};
-        double boxzhi{};
-        double boxxlo{};
-        double boxylo{};
-        double boxzlo{};
-        double Volume{};
-        double rho{};
+        uint64_t timestep{}, Natoms{};
+        double boxxhi{}, boxyhi{}, boxzhi{}, boxxlo{}, boxylo{}, boxzlo{}, Volume{}, rho{};
 
-        size_t ndim = 3;
-        size_t nprops = 9;
-        std::shared_ptr<double[]> Atoms_buf(new double[_Natoms * nprops]);
-        xt::xarray<double>::shape_type lineshape = {_Natoms * nprops};
-        xt::xarray<double>::shape_type rightshape = {_Natoms, nprops};
+        int ndim = 3;
+        int nprops = 9;
+
+        std::unique_ptr<double[]> Atoms_buf(new double[_Natoms * nprops]);
+        std::span<const double> particle_ids(Atoms_buf.get() + 0 * _Natoms, 1 * _Natoms);
+        std::span<const double> cluster_ids (Atoms_buf.get() + 1 * _Natoms, 1 * _Natoms);
+        std::span<const double> masses      (Atoms_buf.get() + 2 * _Natoms, 1 * _Natoms);
+        std::span<const double> velocities  (Atoms_buf.get() + 3 * _Natoms, 3 * _Natoms);
+        std::span<const double> xs          (Atoms_buf.get() + 6 * _Natoms, 1 * _Natoms);
+        std::span<const double> ys          (Atoms_buf.get() + 7 * _Natoms, 1 * _Natoms);
+        std::span<const double> zs          (Atoms_buf.get() + 8 * _Natoms, 1 * _Natoms);
+
+        std::unordered_set<uint64_t> unique_cluster_ids;
+        unique_cluster_ids.reserve(_Natoms);
+        uint64_t Nclusters{}, size{};
+        std::map<uint64_t, std::vector<uint64_t>> particles_by_cluster_id, cluster_ids_by_size, particles_by_size;
+        std::vector<uint64_t> sizes_counts(_Natoms + 1, 0UL);
+        std::vector<double> kes;
+        kes.reserve(_Natoms);
+        double total_temp{}, op{};
+        std::map<uint64_t, double> temps_by_size;
+        // std::map<ul, double> kes_by_size, particle_count_by_size, ndofs_by_size;
 
         for (const auto &[storage, steps] : storages)
         {
-            adios2::Engine reader = lmpio.Open(ws, adios2::Mode::Read, MPI_COMM_SELF);
+            try{
+                adios2::Engine reader = lmpsio.Open(ws, adios2::Mode::Read, MPI_COMM_SELF);
 
-            adios2::Variable<uint64_t> varNstep = lmpio.InquireVariable<uint64_t>(std::string(lcf::timestep));
-            adios2::Variable<uint64_t> varNatoms = lmpio.InquireVariable<uint64_t>(std::string(lcf::natoms));
-            adios2::Variable<double> varBoxxhi = lmpio.InquireVariable<double>(std::string(lcf::boxxhi));
-            adios2::Variable<double> varBoxyhi = lmpio.InquireVariable<double>(std::string(lcf::boxyhi));
-            adios2::Variable<double> varBoxzhi = lmpio.InquireVariable<double>(std::string(lcf::boxzhi));
-            adios2::Variable<double> varBoxxlo = lmpio.InquireVariable<double>(std::string(lcf::boxxlo));
-            adios2::Variable<double> varBoxylo = lmpio.InquireVariable<double>(std::string(lcf::boxylo));
-            adios2::Variable<double> varBoxzlo = lmpio.InquireVariable<double>(std::string(lcf::boxzlo));
-            // id c_clusters mass vx vy vz x y z
-            adios2::Variable<double> varAtoms = lmpio.InquireVariable<double>(std::string(lcf::atoms));
+                adios2::Variable<uint64_t> varNstep  = lmpsio.InquireVariable<uint64_t>(std::string(lcf::timestep));
+                adios2::Variable<uint64_t> varNatoms = lmpsio.InquireVariable<uint64_t>(std::string(lcf::natoms  ));
+                adios2::Variable<double>   varBoxxhi = lmpsio.InquireVariable<double>  (std::string(lcf::boxxhi  ));
+                adios2::Variable<double>   varBoxyhi = lmpsio.InquireVariable<double>  (std::string(lcf::boxyhi  ));
+                adios2::Variable<double>   varBoxzhi = lmpsio.InquireVariable<double>  (std::string(lcf::boxzhi  ));
+                adios2::Variable<double>   varBoxxlo = lmpsio.InquireVariable<double>  (std::string(lcf::boxxlo  ));
+                adios2::Variable<double>   varBoxylo = lmpsio.InquireVariable<double>  (std::string(lcf::boxylo  ));
+                adios2::Variable<double>   varBoxzlo = lmpsio.InquireVariable<double>  (std::string(lcf::boxzlo  ));
+                adios2::Variable<double>   varAtoms  = lmpsio.InquireVariable<double>  (std::string(lcf::atoms   ));
+                // id c_clusters mass vx vy vz x y z
 
-            uint64_t currentStep = 0;
-            while (steps.first != currentStep && reader.BeginStep() != adios2::StepStatus::EndOfStream)
-            {
-                currentStep = reader.CurrentStep();
-                reader.EndStep();
+                uint64_t currentStep = 0;
+                while (currentStep != steps.first)
+                {
+                    if (reader.BeginStep() == adios2::StepStatus::EndOfStream)
+                    {
+                        sts.logger.error("End of stream happened while scrolling to begin step");
+                        sts.logger.error("Storage: {}, begin: {}, end: {}", storage.string(), steps.first, steps.second);
+                        throw std::logic_error("End of stream happened while scrolling to begin step");
+                    }
+                    currentStep = reader.CurrentStep();
+                    reader.EndStep();
+                }
+                while (currentStep != steps.second)
+                {
+                    if (reader.BeginStep() == adios2::StepStatus::EndOfStream)
+                        break;
+                    currentStep = reader.CurrentStep();
+
+                    reader.Get(varNstep, timestep);
+                    reader.Get(varNatoms, Natoms);
+                    reader.Get(varBoxxhi, boxxhi);
+                    reader.Get(varBoxyhi, boxyhi);
+                    reader.Get(varBoxzhi, boxzhi);
+                    reader.Get(varBoxxlo, boxxlo);
+                    reader.Get(varBoxylo, boxylo);
+                    reader.Get(varBoxzlo, boxzlo);
+
+                    Volume = abs((boxxhi - boxxlo) * (boxyhi - boxylo) * (boxzhi - boxzlo));
+                    rho = Natoms / Volume;
+
+                    for (const uint64_t &i : cluster_ids)
+                    {
+                        unique_cluster_ids.insert(i);
+                    }
+                    Nclusters = unique_cluster_ids.size();
+
+                    size = 0;
+                    for (const uint64_t &i : unique_cluster_ids)
+                    {
+                        for (uint64_t j = 0; j < Natoms; ++j)
+                        {
+                            if (cluster_ids[j] == i)
+                                particles_by_cluster_id[i].push_back(j);
+                        }
+                        size = particles_by_cluster_id[i].size();
+                        cluster_ids_by_size[size].push_back(i);
+                        particles_by_size[size].insert(particles_by_size[size].end(), particles_by_cluster_id[i].begin(), particles_by_cluster_id[i].end());
+                    }
+
+                    for (const auto &[k, v] : cluster_ids_by_size)
+                    {
+                        sizes_counts[k] = v.size();
+                    }
+
+                    total_temp = 0;
+
+                    #ifndef __cpp_lib_ranges_zip
+                        for (const auto &[vel, mass] : zip<const std::span<const double> &, const std::span<const double> &>(velocities, masses))
+                    #else
+                        for (const auto &[vel, mass] : std::ranges::views::zip(velocities, masses))
+                    #endif // !__cpp_lib_ranges_zip
+                    {
+                            kes.emplace_back(mass * vel / 2);
+                            total_temp += kes.back();
+                    }
+                    total_temp = std::pow(total_temp / ((Natoms - 1) * ndim), 2);
+
+                    for (const auto &[k, v] : particles_by_size)
+                    {
+                        op = 0;
+                        for (const uint64_t& i : v)
+                        {
+                            op += kes[i];
+                        }
+                        // kes_by_size[k] = op;
+                        // particle_count_by_size = v.size();
+                        // ndofs_by_size[k] = (v.size() - 1) * ndim;
+                        temps_by_size.emplace(k, std::pow(op / ((v.size() - 1) * ndim), 2));
+                    }
+
+
+                    reader.EndStep();
+
+                    unique_cluster_ids.clear();
+                    particles_by_cluster_id.clear();
+                    cluster_ids_by_size.clear();
+                    particles_by_size.clear();
+                    // sizes_counts.clear();
+                    std::fill(sizes_counts.begin(), sizes_counts.end(), 0);
+                    kes.clear();
+                    temps_by_size.clear();
+                }
+
+                reader.Close();
+            }catch (std::logic_error& e){
+                sts.logger.error("Some std::logic_error happened on storage {}, steps: ()", storage.string(), steps.first, steps.second);
+                sts.logger.error(e.what());
+                sts.logger.error("Assuming we can go to the next storage");
+            }catch(std::exception& e){
+                sts.logger.error("Some std::exception happened on storage {}, steps: ()", storage.string(), steps.first, steps.second);
+                sts.logger.error(e.what());
+                sts.logger.error("Assuming we can go to the next storage");
+            }catch (...){
+                sts.logger.error("Some error happened on storage {}, steps: ()", storage.string(), steps.first, steps.second);
+                sts.logger.error("Error is not inherits std::exception, so exiting... Probably the whole program may be aborted");
             }
-
-            reader.Get(varNstep, timestep);
-            reader.Get(varNatoms, Natoms);
-            reader.Get(varBoxxhi, boxxhi);
-            reader.Get(varBoxyhi, boxyhi);
-            reader.Get(varBoxzhi, boxzhi);
-            reader.Get(varBoxxlo, boxxlo);
-            reader.Get(varBoxylo, boxylo);
-            reader.Get(varBoxzlo, boxzlo);
-
-            Volume = abs((boxxhi - boxxlo) * (boxyhi - boxylo) * (boxzhi - boxzlo));
-            rho = Natoms / Volume;
-
-            auto Atoms = xt::adapt_smart_ptr(Atoms_buf, rightshape);
-
-            auto particle_ids = xt::view(Atoms, xt::all(), xt::keep(0));
-            auto cluster_ids = xt::view(Atoms, xt::all(), xt::keep(1));
-            auto particle_masses = xt::view(Atoms, xt::all(), xt::keep(2));
-            auto velocities = xt::sqrt(xt::sum(xt::pow(xt::view(Atoms, xt::all(), xt::range(3, 6)), 2), {1}));
-
-            auto c0 = xt::concatenate(xt::xtuple(cluster_ids, particle_ids));
-
-            reader.Close();
         }
 
         return RETURN_CODES::OK;
