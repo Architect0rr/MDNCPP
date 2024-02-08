@@ -34,12 +34,19 @@ namespace mdn::root
         sts.logger.debug("ADIOS2.IO initialized");
         std::map<fs::path, int> storages;
         int steps = 0;
-
-        for (const auto &storage : _storages.items())
-        {
-            steps = get_total_steps(io, storage.key());
-            storages.emplace(fs::absolute(storage.key()), steps);
-            sts.logger.trace("Storage '{}' contains {} steps", storage.key(), steps);
+        try{
+            for (const auto &storage : _storages.items())
+            {
+                sts.logger.trace("Storage '{}', resolved path: {}", storage.key(), fs::absolute(storage.key()).string());
+                steps = get_total_steps(io, storage.key());
+                storages.emplace(fs::absolute(storage.key()), steps);
+                sts.logger.trace("Storage '{}' contains {} steps", storage.key(), steps);
+            }
+        }catch(std::exception& e){
+            sts.logger.error("Some std::exception was thrown while resolving storages, probably aborting");
+            sts.logger.error(e.what());
+        }catch (...){
+            sts.logger.error("Some unknown exception was thrown while resolving storages, probably aborting");
         }
 
         return storages;
