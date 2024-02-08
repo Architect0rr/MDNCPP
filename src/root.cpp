@@ -13,6 +13,7 @@
 #include "logic.cpp"
 
 #include <fstream>
+#include <memory>
 
 namespace mdn::root
 {
@@ -56,21 +57,21 @@ namespace mdn::root
         return storages;
     }
 
-    const int bearbeit(const utils::MC &sts, const fs::path &sto, std::array<double, 3> *dims)
+    const int bearbeit(const utils::MC &sts, const fs::path &sto, double* dims)
     {
         adios2::ADIOS adios = adios2::ADIOS();
         adios2::IO io = adios.DeclareIO("PReader");
         adios2::Engine reader = io.Open(sto, adios2::Mode::Read);
         reader.BeginStep();
-        adios2::Variable<int> _Natoms = io.InquireVariable<int>(std::string(lcf::natoms));
-        adios2::Variable<double> _boxxhi = io.InquireVariable<double>(std::string(lcf::boxxhi));
-        adios2::Variable<double> _boxyhi = io.InquireVariable<double>(std::string(lcf::boxyhi));
-        adios2::Variable<double> _boxzhi = io.InquireVariable<double>(std::string(lcf::boxzhi));
+        adios2::Variable<int>    varNatoms = io.InquireVariable<int>   (std::string(lcf::natoms));
+        adios2::Variable<double> varboxxhi = io.InquireVariable<double>(std::string(lcf::boxxhi));
+        adios2::Variable<double> varboxyhi = io.InquireVariable<double>(std::string(lcf::boxyhi));
+        adios2::Variable<double> varboxzhi = io.InquireVariable<double>(std::string(lcf::boxzhi));
         int Natoms;
-        reader.Get(_Natoms, Natoms);
-        reader.Get(_boxxhi, dims->data());
-        reader.Get(_boxyhi, dims->data() + 1);
-        reader.Get(_boxzhi, dims->data() + 2);
+        reader.Get(varNatoms, Natoms);
+        reader.Get(varboxxhi, dims + 0);
+        reader.Get(varboxyhi, dims + 1);
+        reader.Get(varboxzhi, dims + 2);
         reader.EndStep();
         reader.Close();
         return Natoms;
@@ -96,12 +97,14 @@ namespace mdn::root
         // }
 
         fs::path sto_check = storages.begin()->first;
-        std::array<double, 3> dims;
-        int Natoms = bearbeit(sts, sto_check, &dims);
+        // std::array<double, 3> dims();
+        std::unique_ptr<double[]> dims(new double[3]);
+        int Natoms = bearbeit(sts, sto_check, dims.get());
         sts.logger.debug("Number of atoms: {}", Natoms);
         sts.logger.debug("Dimensions: [{}, {}, {}]", dims[0], dims[1], dims[2]);
         data[fields::Natoms] = Natoms;
-        data[fields::Dims] = dims;
+        std::array<double, 3> _dims = {*dims.get(), *(dims.get()+1), *(dims.get()+2)};
+        data[fields::Dims] = _dims;
         const double Volume = dims[0] * dims[1] * dims[2];
         data[fields::Volume] = Volume;
         sts.logger.debug("Updating datafile");
