@@ -10,8 +10,20 @@ include(ExternalProject)
 
 set(CMAKE_STAGING_PREFIX ${PROJECT_SOURCE_DIR}/build/stage)
 
+if(NOT DEFINED CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release)
+endif()
+
+if(CMAKE_BUILD_TYPE STREQUAL Debug)
+    message("Defining debug")
+    add_definitions(-DMDNCPP_BUILD_DEBUG)
+endif()
+
+add_definitions(-DMDNCPP_VERSION="0.1.1")
+
+
 set(CMAKE_CXX_FLAGS_Release "-O3")
-set(CMAKE_CXX_FLAGS_DEBUG "-Wall")
+set(CMAKE_CXX_FLAGS_Debug "-Wall")
 
 find_package(MPI REQUIRED)
 find_package(OpenMP REQUIRED)
@@ -45,7 +57,12 @@ ExternalProject_Add(spdlog
     CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
     -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
     -DCMAKE_INSTALL_PREFIX=${CMAKE_STAGING_PREFIX}
-    -DSPDLOG_BUILD_SHARED=OFF
+    # -DSPDLOG_MASTER_PROJECT=OFF
+    # -DSPDLOG_BUILD_EXAMPLE=OFF
+    # -DSPDLOG_BUILD_EXAMPLE_HO=OFF
+    # -DSPDLOG_BUILD_TESTS=OFF
+    # -DSPDLOG_BUILD_TESTS_HO=OFF
+    # -DSPDLOG_BUILD_SHARED=OFF
 )
 
 ExternalProject_Add(argparse
@@ -95,6 +112,11 @@ ExternalProject_Add(json
     -DJSON_BuildTests=OFF
 )
 
+# message("CMAKE_BINARY_DIR is ${CMAKE_BINARY_DIR}")
+
+# configure_file(${PROJECT_SOURCE_DIR}/src/config.hpp.in ${CMAKE_BINARY_DIR}/generated/config.hpp @ONLY)
+# include_directories(${CMAKE_BINARY_DIR}/generated/)
+configure_file(${PROJECT_SOURCE_DIR}/src/config.hpp.in ${PROJECT_SOURCE_DIR}/src/config.hpp @ONLY)
 include_directories(${PROJECT_SOURCE_DIR}/lib/spdlog/include)
 include_directories(${PROJECT_SOURCE_DIR}/lib/argparse/include)
 include_directories(${PROJECT_SOURCE_DIR}/lib/json/include)

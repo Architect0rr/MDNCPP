@@ -1,0 +1,15 @@
+#ifndef __MDN_CONFIG_HPP__
+#define __MDN_CONFIG_HPP__
+
+#ifndef MDNCPP_VERSION
+#define __MDNCPP_VERSION__ "0.0.1"
+#else
+#define __MDNCPP_VERSION__ "@MDNCPP_VERSION@"
+#endif // !MDNCPP_VERSION
+
+
+#ifdef MDNCPP_BUILD_DEBUG
+#define __MDN_BUILD_DEBUG_CODE__
+#endif // MDN_BUILD_DEBUG
+
+#endif // !__MDN_CONFIG_HPP__

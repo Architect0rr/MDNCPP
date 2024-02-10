@@ -4,3 +4,6 @@ logs
 tests
 sample_data
 _CmakeLists.txt
+rsync.ex
+src/config.hpp
+.git

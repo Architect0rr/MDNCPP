@@ -3,15 +3,15 @@
 
 #include <string>
 
-namespace mdn::cs
+namespace cs
 {
     constexpr const int mpi_root = 0;
 }
-namespace mdn::files
+namespace files
 {
     constexpr const std::string_view data("data.json");
 }
-namespace mdn::fields
+namespace fields
 {
     constexpr const std::string_view storages("storages");
     constexpr const std::string_view Natoms("N_atoms");
@@ -19,7 +19,7 @@ namespace mdn::fields
     constexpr const std::string_view Dims("dimensions");
     constexpr const std::string_view data_processing_folder("post_process_folder");
 }
-namespace mdn::lcf
+namespace lcf
 {
     constexpr const std::string_view timestep("ntimestep");
     constexpr const std::string_view atoms("atoms");

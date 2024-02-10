@@ -17,10 +17,9 @@
     #include "zip.cpp"
 #endif // !__cpp_lib_ranges_zip
 
-namespace mdn::logic
-{
+// namespace mdn::logic{
     namespace fs = std::filesystem;
-    RETURN_CODES run(utils::MC &sts, const fs::path &ws, const std::map<fs::path, std::pair<int, int>> &storages, const uint64_t _Natoms)
+    RETURN_CODES MDN::run(const fs::path &ws, const std::map<fs::path, std::pair<int, int>> &storages, const uint64_t _Natoms)
     {
         adios2::ADIOS adios = adios2::ADIOS(MPI_COMM_SELF);
         adios2::IO dataio   = adios.DeclareIO("DATAWRITER");
@@ -84,8 +83,8 @@ namespace mdn::logic
                 {
                     if (reader.BeginStep() == adios2::StepStatus::EndOfStream)
                     {
-                        sts.logger.error("End of stream happened while scrolling to begin step");
-                        sts.logger.error("Storage: {}, begin: {}, end: {}", storage.string(), steps.first, steps.second);
+                        logger.error("End of stream happened while scrolling to begin step");
+                        logger.error("Storage: {}, begin: {}, end: {}", storage.string(), steps.first, steps.second);
                         throw std::logic_error("End of stream happened while scrolling to begin step");
                     }
                     currentStep = reader.CurrentStep();
@@ -109,7 +108,7 @@ namespace mdn::logic
                     Volume = abs((boxxhi - boxxlo) * (boxyhi - boxylo) * (boxzhi - boxzlo));
                     rho = Natoms / Volume;
 
-                    for (const uint64_t &i : cluster_ids)
+                    for (const uint64_t i : cluster_ids)
                     {
                         unique_cluster_ids.insert(i);
                     }
@@ -174,21 +173,21 @@ namespace mdn::logic
 
                 reader.Close();
             }catch (std::logic_error& e){
-                sts.logger.error("Some std::logic_error happened on storage {}, steps: ()", storage.string(), steps.first, steps.second);
-                sts.logger.error(e.what());
-                sts.logger.error("Assuming we can go to the next storage");
+                logger.error("Some std::logic_error happened on storage {}, steps: ()", storage.string(), steps.first, steps.second);
+                logger.error(e.what());
+                logger.error("Assuming we can go to the next storage");
             }catch(std::exception& e){
-                sts.logger.error("Some std::exception happened on storage {}, steps: ()", storage.string(), steps.first, steps.second);
-                sts.logger.error(e.what());
-                sts.logger.error("Assuming we can go to the next storage");
+                logger.error("Some std::exception happened on storage {}, steps: ()", storage.string(), steps.first, steps.second);
+                logger.error(e.what());
+                logger.error("Assuming we can go to the next storage");
             }catch (...){
-                sts.logger.error("Some error happened on storage {}, steps: ()", storage.string(), steps.first, steps.second);
-                sts.logger.error("Error is not inherits std::exception, so exiting... Probably the whole program may be aborted");
+                logger.error("Some error happened on storage {}, steps: ()", storage.string(), steps.first, steps.second);
+                logger.error("Error is not inherits std::exception, so exiting... Probably the whole program may be aborted");
             }
         }
 
         return RETURN_CODES::OK;
     }
-}
+// } // namespace
 
 #endif // !__MDN_LOGIC__
