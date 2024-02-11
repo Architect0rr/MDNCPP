@@ -38,10 +38,8 @@ namespace mdn{
 
         SETUP_BARRIER(wcomm);
 
-        fs::path log_folder = cwd / "logs";
-
         TRY
-            setup_logger(log_folder, rank);
+            setup_logger(rank);
         CATCH("Error while setting up logger")
 
         return RETURN_CODES::OK;
@@ -61,12 +59,13 @@ namespace mdn{
         logger.debug("Broadcasting distribution buffer size");
         MPI_Bcast(&count, 1, MPI_UNSIGNED_LONG, cs::mpi_root, wcomm);
         logger.debug("Got distribution buffer size: {}", count);
-        char data[count];
+        std::unique_ptr<char> data(new char[count]);
+        // char data[count];
         logger.debug("Broadcasting distribution");
-        MPI_Bcast(&data, count, MPI_BYTE, cs::mpi_root, wcomm);
+        MPI_Bcast(data.get(), count, MPI_BYTE, cs::mpi_root, wcomm);
         logger.debug("Got distribution");
 
-        yas::intrusive_buffer asd = yas::intrusive_buffer(data, count);
+        yas::intrusive_buffer asd = yas::intrusive_buffer(data.get(), count);
 
         yas::mem_istream is(asd);
         yas::binary_iarchive<yas::mem_istream> ia(is);
@@ -79,16 +78,8 @@ namespace mdn{
         logger.debug("Parsed distribution");
 
         logger.debug("Not dumping parsed distribution");
-        // logger.trace("Completed distribution:");
-        // for (const auto &[worker, stors] : distribution)
-        // {
-        //     logger.trace("Worker: {}", worker);
-        //     for (const auto &[stor, bounds] : stors)
-        //     {
-        //         _distribution[worker].insert(std::make_pair(fs::path(stor), bounds));
-        //         logger.trace("Storage: '{}' [{}, {}]", stor, bounds.first, bounds.second);
-        //     }
-        // }
+
+        ds2p(_distribution, distribution);
 
         uint64_t Natoms{};
         logger.debug("Bcasting Natoms");
@@ -121,9 +112,9 @@ namespace mdn{
         logger.info("Output data will be written to {}", ss.string());
 
         logger.info("Starting calculations...");
-        TRY
-            run(ss, distribution, Natoms);
-        CATCH("Error while doing caculations")
+        // TRY
+        //     run(ss, distribution, Natoms);
+        // CATCH("Error while doing caculations")
 
         return RETURN_CODES::OK;
     }

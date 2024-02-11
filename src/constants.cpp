@@ -13,10 +13,12 @@ namespace mdn{
     {
         constexpr const std::string_view data("data.json");
         constexpr const std::string_view output_datafile_basename("data.bp");
+        constexpr const std::string_view cache("MDNCPP.cache");
     }
     namespace folders{
         constexpr const std::string_view log("logs/MDNCPP");
         constexpr const std::string_view post_process_folder("post_processing");
+        constexpr const std::string_view cache("cache");
     }
     namespace fields
     {

@@ -137,15 +137,21 @@ namespace mdn {
             datafile_out << std::setw(4) << data << std::endl;
         CATCH("Error while writing datafile")
 
-        fs::path data_processing_folder = cwd / data.at(fields::data_processing_folder);
+        fs::path data_processing_folder = cwd / folders::post_process_folder;
         logger.debug("Creating post-processing directory: " + data_processing_folder.string());
-        if (!fs::exists(data_processing_folder))
-        {
-            std::error_code ec;
-            if (!(fs::create_directory(data_processing_folder, ec) && ec))
-            {
-                logger.error("Cannot create directory: " + data_processing_folder.string());
-                throw std::runtime_error("Cannot create post-processing directory: " + data_processing_folder.string());
+
+        std::error_code ec;
+        if (!fs::exists(data_processing_folder, ec)){
+            if (!ec){
+                if (!(fs::create_directory(data_processing_folder, ec) && ec)){
+                    logger.error("Can not create directory '{}' due to error with code: {}. Message", data_processing_folder.string(), ec.value());
+                    logger.error(ec.message());
+                    throw std::runtime_error("Can not create post-processing directory: " + data_processing_folder.string());
+                }
+            }else{
+                logger.error("Can not check directory '{}' existense due to error with code: {}. Message", data_processing_folder.string(), ec.value());
+                logger.error(ec.message());
+                throw std::runtime_error("Can not check post-processing directory existense: " + data_processing_folder.string());
             }
         }
 
@@ -230,7 +236,7 @@ namespace mdn {
         std::cout << "  Setup barrier released" << std::endl;
 
         TRY
-            setup_logger(log_folder, rank);
+            setup_logger(rank);
         CATCH("Error while setting up logger")
 
         std::cout << "  Root setup OK" << std::endl;
@@ -254,9 +260,10 @@ namespace mdn {
         fs::path ss = args.outfile / (args.outfile.filename().string() + "." + std::to_string(rank));
         logger.info("Output data will be written to {}", ss.string());
 
-        TRY
-            run(ss, distribution, Natoms);
-        CATCH("Error while doing caculations")
+        logger.info("Starting calculations...");
+        // TRY
+        //     run(ss, distribution, Natoms);
+        // CATCH("Error while doing caculations")
 
         return RETURN_CODES::OK;
     }

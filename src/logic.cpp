@@ -20,8 +20,7 @@
 namespace mdn{
 
     namespace fs = std::filesystem;
-    RETURN_CODES MDN::run(const fs::path &ws, const std::map<fs::path, std::pair<int, int>> &storages, const uint64_t _Natoms)
-    {
+    RETURN_CODES MDN::run(const fs::path &ws, const std::map<fs::path, std::pair<int, int>> &storages, const uint64_t _Natoms){
         adios2::ADIOS adios = adios2::ADIOS(MPI_COMM_SELF);
         adios2::IO dataio   = adios.DeclareIO("DATAWRITER");
         adios2::IO lmpsio   = adios.DeclareIO("LAMMPSReader");

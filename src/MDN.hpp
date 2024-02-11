@@ -29,6 +29,15 @@
         logger.error(mess);                                                             \
         throw;                                                                          \
     }
+#define CATCH_NOTHROW(mess)                                          \
+    }catch (std::exception & e){                                     \
+        logger.error("Some std::exception was thrown. Context:");    \
+        logger.error(mess);                                          \
+        logger.error(e.what());                                      \
+    }catch (...){                                                    \
+        logger.error("Some unknown exception was thrown. Context:"); \
+        logger.error(mess);                                          \
+    }
 
 #endif // !__MDN_TRY_CATCH_MACRO__
 
@@ -54,6 +63,7 @@ namespace mdn{
         int mode = 0;
         bool verbose = false;
         fs::path outfile = "/";
+        bool cache = false;
     };
 
     class MDN{
@@ -76,12 +86,18 @@ namespace mdn{
         const MPI_Comm wcomm = MPI_COMM_WORLD;
         std::string_view prefix;
 
+        void setup_logger(const int);
+        RETURN_CODES run(const fs::path &, const std::map<fs::path, std::pair<int, int>> &, const uint64_t);
+
+        // funcitons different for (non) root workers
         virtual RETURN_CODES entry() = 0;
         virtual RETURN_CODES sanity() = 0;
         virtual RETURN_CODES setup() = 0;
         virtual uint64_t dns(std::map<fs::path, std::pair<int, int>> &) = 0;
-        void setup_logger(const fs::path &, const int);
-        RETURN_CODES run(const fs::path &, const std::map<fs::path, std::pair<int, int>> &, const uint64_t);
+
+        // utility functions
+        RETURN_CODES create_d_if_not(const fs::path&, const std::string&);
+        RETURN_CODES check_existense(const fs::path& folder, const std::string&);
     };
 
     class MDN_root : public MDN{
