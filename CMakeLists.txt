@@ -62,7 +62,7 @@ ExternalProject_Add(spdlog
     # -DSPDLOG_BUILD_EXAMPLE_HO=OFF
     # -DSPDLOG_BUILD_TESTS=OFF
     # -DSPDLOG_BUILD_TESTS_HO=OFF
-    # -DSPDLOG_BUILD_SHARED=OFF
+    # -DSPDLOG_BUILD_SHARED=ON
 )
 
 ExternalProject_Add(argparse
@@ -112,10 +112,6 @@ ExternalProject_Add(json
     -DJSON_BuildTests=OFF
 )
 
-# message("CMAKE_BINARY_DIR is ${CMAKE_BINARY_DIR}")
-
-# configure_file(${PROJECT_SOURCE_DIR}/src/config.hpp.in ${CMAKE_BINARY_DIR}/generated/config.hpp @ONLY)
-# include_directories(${CMAKE_BINARY_DIR}/generated/)
 configure_file(${PROJECT_SOURCE_DIR}/src/config.hpp.in ${PROJECT_SOURCE_DIR}/src/config.hpp @ONLY)
 include_directories(${PROJECT_SOURCE_DIR}/lib/spdlog/include)
 include_directories(${PROJECT_SOURCE_DIR}/lib/argparse/include)

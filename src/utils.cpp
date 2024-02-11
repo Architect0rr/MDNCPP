@@ -6,6 +6,7 @@
 #define __MDN_utils_CPP__
 
 #include <filesystem>
+#include <chrono>
 
 #include "argparse/argparse.hpp"
 
@@ -14,8 +15,9 @@
 #include "spdlog/sinks/basic_file_sink.h"
 
 #include "MDN.hpp"
+#include "constants.cpp"
 
-// namespace mdn {
+namespace mdn{
     namespace fs = std::filesystem;
     class existing_string_buf : public std::streambuf
     {
@@ -47,14 +49,15 @@
     {
         fs::path log_file = log_folder / (std::to_string(rank) + ".log");
 
-        auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+        console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
         console_sink->set_level(spdlog::level::trace);
 
-        auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(log_file, true);
+        file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(log_file);
         file_sink->set_level(spdlog::level::trace);
 
         logger = spdlog::logger(std::string("Rank") + std::to_string(rank), {console_sink, file_sink});
         logger.set_level(spdlog::level::trace);
+        spdlog::flush_every(std::chrono::seconds(10));
     }
 
     RETURN_CODES MDN::parse_args(const int argc, const char ***argv)
@@ -161,7 +164,7 @@
         }
         else
         {
-            args.outfile = cwd / "data.bp";
+            args.outfile = cwd / folders::post_process_folder / files::output_datafile_basename;
             if (fs::exists(args.outfile))
             {
                 std::cerr << "Default output file '" << args.outfile.string() << "' already exists. Error code: " << ec.value() << std::endl;
@@ -169,9 +172,22 @@
                 throw std::runtime_error("Default output file already exists");
             }
         }
+        fs::path ofpp = args.outfile.parent_path();
+        if (rank == cs::mpi_root){
+            if (!fs::exists(ofpp)){
+                if(!fs::create_directories(ofpp, ec)){
+                    std::cerr << "Cannot create non-existent post-processing directory(ies): " << ofpp.string() << std::endl;
+                    std::cerr << "Error code: " << ec.value() << std::endl;
+                    std::cerr << "Message: " << ec.message() << std::endl;
+                    throw std::runtime_error("Cannot create non-existent directory: " + ofpp.string());
+                }else{
+                    std::cout << "Created post-processing directory(ies): " << ofpp << std::endl;
+                }
+            }
+        }
 
         return RETURN_CODES::OK;
     }
-// } // namespace
+} // namespace
 
 #endif // !__MDN_utils_CPP__

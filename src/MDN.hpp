@@ -43,77 +43,75 @@
 
 #include "config.hpp"
 
-// namespace mdn {
+namespace mdn{
 
-namespace fs = std::filesystem;
-using json = nlohmann::json;
+    namespace fs = std::filesystem;
+    using json = nlohmann::json;
 
-struct Arguments
-{
-    bool debug = false;
-    bool trace = false;
-    int mode = 0;
-    bool verbose = false;
-    fs::path outfile = "/";
-};
+    struct Arguments{
+        bool debug = false;
+        bool trace = false;
+        int mode = 0;
+        bool verbose = false;
+        fs::path outfile = "/";
+    };
 
-class MDN
-{
-public:
-    MDN() = delete;
-    MDN(const int rank = 0, const int size = 0, MPI_Comm comm = MPI_COMM_WORLD, const char *prefix = "unknown") noexcept : rank(rank), size(size), wcomm(comm), prefix(prefix) {}
-    ~MDN() = default;
+    class MDN{
+    public:
+        MDN() = delete;
+        MDN(const int rank = 0, const int size = 0, MPI_Comm comm = MPI_COMM_WORLD, const char *prefix = "unknown") noexcept : rank(rank), size(size), wcomm(comm), prefix(prefix) {}
+        ~MDN() = default;
 
-    RETURN_CODES parse_args(const int argc, const char ***argv);
-    RETURN_CODES start(const int argc, const char ***argv);
+        RETURN_CODES parse_args(const int argc, const char ***argv);
+        RETURN_CODES start(const int argc, const char ***argv);
 
-protected:
-    spdlog::logger logger = spdlog::logger("default");
-    fs::path cwd = "/";
-    Arguments args;
-    const int rank = 0;
-    const int size = 0;
-    const MPI_Comm wcomm = MPI_COMM_WORLD;
-    std::string_view prefix;
+    protected:
+        spdlog::logger logger = spdlog::logger("default");
+        std::shared_ptr<spdlog::sinks::stdout_color_sink_mt> console_sink;
+        std::shared_ptr<spdlog::sinks::basic_file_sink_mt> file_sink;
+        fs::path cwd = "/";
+        Arguments args;
+        const int rank = 0;
+        const int size = 0;
+        const MPI_Comm wcomm = MPI_COMM_WORLD;
+        std::string_view prefix;
 
-    virtual RETURN_CODES entry() = 0;
-    virtual RETURN_CODES sanity() = 0;
-    virtual RETURN_CODES setup() = 0;
-    virtual uint64_t dns(std::map<fs::path, std::pair<int, int>> *) = 0;
-    void setup_logger(const fs::path &, const int);
-    RETURN_CODES run(const fs::path &, const std::map<fs::path, std::pair<int, int>> &, const uint64_t);
-};
+        virtual RETURN_CODES entry() = 0;
+        virtual RETURN_CODES sanity() = 0;
+        virtual RETURN_CODES setup() = 0;
+        virtual uint64_t dns(std::map<fs::path, std::pair<int, int>> &) = 0;
+        void setup_logger(const fs::path &, const int);
+        RETURN_CODES run(const fs::path &, const std::map<fs::path, std::pair<int, int>> &, const uint64_t);
+    };
 
-class MDN_root : public MDN
-{
-public:
-    using MDN::MDN;
+    class MDN_root : public MDN{
+    public:
+        using MDN::MDN;
 
-private:
-    RETURN_CODES entry() override;
-    RETURN_CODES sanity() override;
-    RETURN_CODES setup() override;
-    uint64_t dns(std::map<fs::path, std::pair<int, int>> *) override;
+    private:
+        RETURN_CODES entry() override;
+        RETURN_CODES sanity() override;
+        RETURN_CODES setup() override;
+        uint64_t dns(std::map<fs::path, std::pair<int, int>> &) override;
 
-    const uint64_t bearbeit(const fs::path &, double *);
-    const std::map<fs::path, int> storage_rsolve(const json &);
-    const int get_total_steps(adios2::IO &, const fs::path &);
-    RETURN_CODES distribute(const std::map<fs::path, int> &, std::map<fs::path, std::pair<int, int>> *);
-    std::map<int, std::map<fs::path, std::pair<int, int>>> make_distribution(const std::map<fs::path, int> &);
-};
+        const uint64_t bearbeit(const fs::path &, double *);
+        const std::map<fs::path, int> storage_rsolve(const json &);
+        const int get_total_steps(adios2::IO &, const fs::path &);
+        RETURN_CODES distribute(const std::map<fs::path, int> &, std::map<fs::path, std::pair<int, int>> &);
+        std::map<int, std::map<fs::path, std::pair<int, int>>> make_distribution(const std::map<fs::path, int> &);
+    };
 
-class MDN_nonroot : public MDN
-{
-public:
-    using MDN::MDN;
+    class MDN_nonroot : public MDN{
+    public:
+        using MDN::MDN;
 
-private:
-    RETURN_CODES entry() override;
-    RETURN_CODES sanity() override;
-    RETURN_CODES setup() override;
-    uint64_t dns(std::map<fs::path, std::pair<int, int>> *) override;
-};
+    private:
+        RETURN_CODES entry() override;
+        RETURN_CODES sanity() override;
+        RETURN_CODES setup() override;
+        uint64_t dns(std::map<fs::path, std::pair<int, int>> &) override;
+    };
 
-// } // namespace mdn
+} // namespace mdn
 
 #endif // !__MDN_HPP__

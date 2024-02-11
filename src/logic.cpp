@@ -17,7 +17,8 @@
     #include "zip.cpp"
 #endif // !__cpp_lib_ranges_zip
 
-// namespace mdn::logic{
+namespace mdn{
+
     namespace fs = std::filesystem;
     RETURN_CODES MDN::run(const fs::path &ws, const std::map<fs::path, std::pair<int, int>> &storages, const uint64_t _Natoms)
     {
@@ -62,21 +63,21 @@
         std::map<uint64_t, double> temps_by_size;
         // std::map<ul, double> kes_by_size, particle_count_by_size, ndofs_by_size;
 
+        adios2::Variable<uint64_t> varNstep;
+        adios2::Variable<uint64_t> varNatoms;
+        adios2::Variable<double>   varBoxxhi;
+        adios2::Variable<double>   varBoxyhi;
+        adios2::Variable<double>   varBoxzhi;
+        adios2::Variable<double>   varBoxxlo;
+        adios2::Variable<double>   varBoxylo;
+        adios2::Variable<double>   varBoxzlo;
+        adios2::Variable<double>   varAtoms;
+        // id c_clusters mass vx vy vz x y z
+
         for (const auto &[storage, steps] : storages)
         {
             try{
                 adios2::Engine reader = lmpsio.Open(ws, adios2::Mode::Read, MPI_COMM_SELF);
-
-                adios2::Variable<uint64_t> varNstep  = lmpsio.InquireVariable<uint64_t>(std::string(lcf::timestep));
-                adios2::Variable<uint64_t> varNatoms = lmpsio.InquireVariable<uint64_t>(std::string(lcf::natoms  ));
-                adios2::Variable<double>   varBoxxhi = lmpsio.InquireVariable<double>  (std::string(lcf::boxxhi  ));
-                adios2::Variable<double>   varBoxyhi = lmpsio.InquireVariable<double>  (std::string(lcf::boxyhi  ));
-                adios2::Variable<double>   varBoxzhi = lmpsio.InquireVariable<double>  (std::string(lcf::boxzhi  ));
-                adios2::Variable<double>   varBoxxlo = lmpsio.InquireVariable<double>  (std::string(lcf::boxxlo  ));
-                adios2::Variable<double>   varBoxylo = lmpsio.InquireVariable<double>  (std::string(lcf::boxylo  ));
-                adios2::Variable<double>   varBoxzlo = lmpsio.InquireVariable<double>  (std::string(lcf::boxzlo  ));
-                adios2::Variable<double>   varAtoms  = lmpsio.InquireVariable<double>  (std::string(lcf::atoms   ));
-                // id c_clusters mass vx vy vz x y z
 
                 uint64_t currentStep = 0;
                 while (currentStep != steps.first)
@@ -90,11 +91,23 @@
                     currentStep = reader.CurrentStep();
                     reader.EndStep();
                 }
+
+
                 while (currentStep != steps.second)
                 {
                     if (reader.BeginStep() == adios2::StepStatus::EndOfStream)
                         break;
                     currentStep = reader.CurrentStep();
+
+                    varNstep  = lmpsio.InquireVariable<uint64_t>(std::string(lcf::timestep));
+                    varNatoms = lmpsio.InquireVariable<uint64_t>(std::string(lcf::natoms  ));
+                    varBoxxhi = lmpsio.InquireVariable<double>  (std::string(lcf::boxxhi  ));
+                    varBoxyhi = lmpsio.InquireVariable<double>  (std::string(lcf::boxyhi  ));
+                    varBoxzhi = lmpsio.InquireVariable<double>  (std::string(lcf::boxzhi  ));
+                    varBoxxlo = lmpsio.InquireVariable<double>  (std::string(lcf::boxxlo  ));
+                    varBoxylo = lmpsio.InquireVariable<double>  (std::string(lcf::boxylo  ));
+                    varBoxzlo = lmpsio.InquireVariable<double>  (std::string(lcf::boxzlo  ));
+                    varAtoms  = lmpsio.InquireVariable<double>  (std::string(lcf::atoms   ));
 
                     reader.Get(varNstep, timestep);
                     reader.Get(varNatoms, Natoms);
@@ -183,11 +196,12 @@
             }catch (...){
                 logger.error("Some error happened on storage {}, steps: ()", storage.string(), steps.first, steps.second);
                 logger.error("Error is not inherits std::exception, so exiting... Probably the whole program may be aborted");
+                throw;
             }
         }
 
         return RETURN_CODES::OK;
     }
-// } // namespace
+} // namespace
 
 #endif // !__MDN_LOGIC__

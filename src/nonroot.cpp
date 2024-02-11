@@ -15,10 +15,10 @@
 #include "logic.cpp"
 #include "MDN.hpp"
 
-// namespace mdn::nonroot{
+namespace mdn{
+
     namespace fs = std::filesystem;
-    RETURN_CODES MDN_nonroot::sanity()
-    {
+    RETURN_CODES MDN_nonroot::sanity(){
         int rnd;
         MPI_Bcast(&rnd, 1, MPI_INT, cs::mpi_root, wcomm);
         // sts.logger.info(std::string("Got number: " + std::to_string(rnd)));
@@ -31,8 +31,7 @@
         return RETURN_CODES::OK;
     }
 
-    RETURN_CODES MDN_nonroot::setup()
-    {
+    RETURN_CODES MDN_nonroot::setup(){
         TRY
             sanity();
         CATCH_NOLOGGER("Error while checking sanity")
@@ -48,8 +47,7 @@
         return RETURN_CODES::OK;
     }
 
-    uint64_t MDN_nonroot::dns(std::map<fs::path, std::pair<int, int>> *_distrib)
-    {
+    uint64_t MDN_nonroot::dns(std::map<fs::path, std::pair<int, int>> &_distrib){
         // DISTRIBUTION_BARRIER(MPI_COMM_WORLD);
         // MPI_Status status;
         // int iop{};
@@ -80,26 +78,32 @@
         ia.serialize(io);
         logger.debug("Parsed distribution");
 
-        logger.trace("Completed distribution:");
-        for (const auto &[worker, stors] : distribution)
-        {
-            logger./* data */ trace("Worker: {}", worker);
-            for (const auto &[stor, bounds] : stors)
-            {
-                _distribution[worker].insert(std::make_pair(fs::path(stor), bounds));
-                logger.trace("Storage: '{}' [{}, {}]", stor, bounds.first, bounds.second);
-            }
-        }
+        logger.debug("Not dumping parsed distribution");
+        // logger.trace("Completed distribution:");
+        // for (const auto &[worker, stors] : distribution)
+        // {
+        //     logger.trace("Worker: {}", worker);
+        //     for (const auto &[stor, bounds] : stors)
+        //     {
+        //         _distribution[worker].insert(std::make_pair(fs::path(stor), bounds));
+        //         logger.trace("Storage: '{}' [{}, {}]", stor, bounds.first, bounds.second);
+        //     }
+        // }
 
         uint64_t Natoms{};
-        MPI_Bcast(&Natoms, 1, MPI_UINT64_T, 0, wcomm);
+        logger.debug("Bcasting Natoms");
+        MPI_Bcast(&Natoms, 1, MPI_UINT64_T, cs::mpi_root, wcomm);
+        logger.debug("Got Natoms");
 
-        *_distrib = _distribution.at(rank);
+        for (const auto &[k,v]: distribution.at(rank)){
+            _distrib.emplace(k ,v);
+        }
+        logger.debug("Distribution complete");
+
         return Natoms;
     }
 
-    RETURN_CODES MDN_nonroot::entry()
-    {
+    RETURN_CODES MDN_nonroot::entry(){
         TRY
             setup();
         CATCH_NOLOGGER("Error wahile setting up")
@@ -107,20 +111,23 @@
 
 
         logger.debug("Getting distribution");
-        std::map<fs::path, std::pair<int, int>> *distribution = {};
+        std::map<fs::path, std::pair<int, int>> distribution;
         uint64_t Natoms{};
         TRY
             Natoms = dns(distribution);
         CATCH("Error while getting distribution")
 
         fs::path ss = args.outfile / (args.outfile.filename().string() + "." + std::to_string(rank));
+        logger.info("Output data will be written to {}", ss.string());
 
         logger.info("Starting calculations...");
         TRY
-            run(ss, *distribution, Natoms);
+            run(ss, distribution, Natoms);
         CATCH("Error while doing caculations")
 
         return RETURN_CODES::OK;
     }
-// } // namespace
+
+} // namespace mdn
+
 #endif // !__MDN_NONROOT__

@@ -1,7 +1,7 @@
 #ifndef __MDN_utils_HPP__
 #define __MDN_utils_HPP__
 
-// namespace mdn {
+namespace mdn{
 
     enum MPI_TAGS : int
     {
@@ -16,6 +16,6 @@
         EXIT
     };
 
-// } // namespace mdn
+} // namespace mdn
 
 #endif // !__MDN_utils_HPP__
