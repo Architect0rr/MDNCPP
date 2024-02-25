@@ -13,7 +13,8 @@ namespace mdn{
     {
         constexpr const std::string_view data("data.json");
         constexpr const std::string_view output_datafile_basename("data.bp");
-        constexpr const std::string_view cache("MDNCPP.cache");
+        constexpr const std::string_view distribution_cache("distribution.cache");
+        constexpr const std::string_view storages_cache("storages.cache");
     }
     namespace folders{
         constexpr const std::string_view log("logs/MDNCPP");

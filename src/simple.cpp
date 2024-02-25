@@ -88,47 +88,91 @@ namespace mdn {
         return distribution;
     }
 
+    const bool MDN_root::save_distribution(const std::map<int, std::map<std::string, std::pair<int, int>>>& distribution){
+        logger.info("Trying to cache distribution");
+        fs::path cache_folder = cwd / folders::cache;
+        fs::path cache_file = cwd / folders::cache / files::distribution_cache;
 
+        if (create_d_if_not(cache_folder, "Cache") != RETURN_CODES::OK){
+            logger.warn("Not caching distribution");
+            return false;
+        }
+        std::error_code ecc;
+        if (!fs::remove(cache_file, ecc)){
+            if (ecc){
+                logger.error("Cannot remove previous cache file: {}, so cache cannot be saved", cache_file.string());
+                return false;
+            }
+        }
+        logger.info("Trying to write distribution to cache");
+        TRY
+            auto odo = YAS_OBJECT_NVP("distribution", ("distribution", distribution));
+            auto odon = YAS_OBJECT_NVP("NW", ("NW", size));
+            yas::file_ostream osf(cache_file.string().c_str());
+            // yas::binary_oarchive<yas::file_ostream> oaf(osf);
+            // oaf.serialize(oo);
+            // oaf.serialize(oon);
+            yas::save<yas::file|yas::json>(osf, odo);
+            yas::save<yas::file|yas::json>(osf, odon);
+            osf.flush();
+        CATCH_NOTHROW_RET("Error while writing cache (yas error)", false)
+        logger.info("Distribution for {} workers written to cache file: {}", size, cache_file.string());
+        return true;
+    }
+
+    const bool MDN_root::load_distribution(std::map<int, std::map<std::string, std::pair<int, int>>>& distribution){
+        logger.info("Trying to load cached distribution");
+        fs::path cache_folder = cwd / folders::cache;
+        fs::path cache_file = cwd / folders::cache / files::distribution_cache;
+        std::error_code ecc;
+        if (fs::exists(cache_folder, ecc)){
+                if(fs::exists(cache_file, ecc)){
+                    int Nworker{};
+                    yas::file_istream isf(cache_file.string().c_str());
+                    yas::load<yas::file|yas::json>(isf, YAS_OBJECT_NVP(
+                        "distribution", ("distribution", distribution)
+                        ));
+                    yas::load<yas::file|yas::json>(isf, YAS_OBJECT_NVP(
+                        "NW", ("NW", Nworker)
+                        ));
+                    if (Nworker == size){
+                        return true;
+                    }else{
+                        logger.warn("Cached distribution mismatch number of worker, so new distribution will be cumputed and cached");
+                        return false;
+                    }
+                }else{
+                    if (!ecc){
+                        logger.warn("Cache file {} does not exists, so cached distribution is not loaded", cache_file.string());
+                    }else{
+                        logger.warn("Cannot check cache file {} existense due to error {}, so cached distribution is not loaded", cache_file.string(), ecc.message());
+                    }
+                    return false;
+                }
+        }else{
+            if (!ecc){
+                logger.warn("Cache directory {} does not exists, so cached distribution is not loaded", cache_folder.string());
+            }else{
+                logger.warn("Cannot check cache directory {} existense due to error {}, so cached distribution is not loaded", cache_folder.string(), ecc.message());
+            }
+            return false;
+        }
+        return false;
+    }
 
     RETURN_CODES MDN_root::distribute(const std::map<fs::path, int> &storages, std::map<fs::path, std::pair<int, int>> &_distrib){
-
         std::map<int, std::map<std::string, std::pair<int, int>>> _distribution;
         std::map<int, std::map<fs::path, std::pair<int, int>>> distribution;
 
-        bool cache_loaded = false;
         if (args.cache){
-            logger.info("Trying to load cached distribution");
-            std::error_code ecc;
-            if (fs::exists(cwd / folders::cache, ecc)){
-                if (!ecc)
-                    if(fs::exists(cwd / folders::cache / files::cache, ecc)){
-                        if (!ecc){
-                            int Nworker{};
-                            yas::file_istream isf((cwd / folders::cache / files::cache).string().c_str());
-                            yas::load<yas::file|yas::json>(isf, YAS_OBJECT_NVP(
-                                "distribution", ("distribution", _distribution)
-                                ));
-                            yas::load<yas::file|yas::json>(isf, YAS_OBJECT_NVP(
-                                "NW", ("NW", Nworker)
-                                ));
-                            if (Nworker == size){
-                                ds2p(distribution, _distribution);
-                                cache_loaded = true;
-                            }else{
-                                logger.info("Cached distribution mismatch number of worker, so new distribution will be cumputed and cached");
-                            }
-                        }
-                    }else{
-                        logger.info("Cache file {} does not exists, so cached distribution is not loaded", (cwd / folders::cache / files::cache).string());
-                    }
-            }else{
-                logger.info("Cache directory {} does not exists, so cached distribution is not loaded", (cwd / folders::cache).string());
-            }
-        }
-        if (!cache_loaded)
+            const bool cache_loaded = load_distribution(_distribution);
+            if (!cache_loaded)
+                distribution = make_distribution(storages);
+        }else{
             distribution = make_distribution(storages);
-
+        }
         dp2s(distribution, _distribution);
+
 
         logger.debug("Completed distribution:");
         for (const auto &[worker, stors] : distribution){
@@ -145,24 +189,7 @@ namespace mdn {
         // auto oon = YAS_OBJECT("NW", ("NWM", size));
 
         if (args.cache){
-            logger.info("Cache enabled");
-            if (create_d_if_not(cwd / folders::cache, "Cache") != RETURN_CODES::OK){
-                logger.warn("Not caching distribution");
-            }else{
-                logger.info("Trying to write distribution to cache");
-                TRY
-                    auto odo = YAS_OBJECT_NVP("distribution", ("distribution", _distribution));
-                    auto odon = YAS_OBJECT_NVP("NW", ("NW", size));
-                    yas::file_ostream osf((cwd / folders::cache / files::cache).string().c_str());
-                    // yas::binary_oarchive<yas::file_ostream> oaf(osf);
-                    // oaf.serialize(oo);
-                    // oaf.serialize(oon);
-                    yas::save<yas::file|yas::json>(osf, odo);
-                    yas::save<yas::file|yas::json>(osf, odon);
-                    osf.flush();
-                CATCH_NOTHROW("Error while writing cache (yas error)")
-                logger.info("Distribution for {} workers written to cache", size);
-            }
+            save_distribution(_distribution);
         }
 
         oa.serialize(oo);

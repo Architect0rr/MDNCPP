@@ -112,9 +112,9 @@ namespace mdn{
         logger.info("Output data will be written to {}", ss.string());
 
         logger.info("Starting calculations...");
-        // TRY
-        //     run(ss, distribution, Natoms);
-        // CATCH("Error while doing caculations")
+        TRY
+            run(ss, distribution, Natoms);
+        CATCH("Error while doing caculations")
 
         return RETURN_CODES::OK;
     }

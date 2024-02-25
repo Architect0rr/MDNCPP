@@ -15,30 +15,108 @@
 
 #include <fstream>
 #include <memory>
+#include <functional>
 
 namespace mdn {
 
     using json = nlohmann::json;
     namespace fs = std::filesystem;
 
-    const int MDN_root::get_total_steps(adios2::IO &io, const fs::path &storage)
-    {
+    const int MDN_root::get_total_steps(adios2::IO &io, const fs::path &storage){
         adios2::Engine reader = io.Open(storage, adios2::Mode::Read);
         int steps = reader.Steps();
         reader.Close();
         return steps;
     }
 
-    const std::map<fs::path, int> MDN_root::storage_rsolve(const json &_storages)
-    {
+    const bool MDN_root::save_storages(const std::map<fs::path, int>& _storages, const unsigned long hash){
+        std::map<std::string, int> storages;
+        for (const auto& [k, v]: _storages){
+            storages.emplace(k.string(), v);
+        }
+        logger.info("Trying to cache storages");
+        fs::path cache_folder = cwd / folders::cache;
+        fs::path cache_file = cwd / folders::cache / files::storages_cache;
+
+        if (create_d_if_not(cache_folder, "Cache") != RETURN_CODES::OK){
+            logger.warn("Not caching storages");
+            return false;
+        }
+        std::error_code ecc;
+        if (!fs::remove(cache_file, ecc)){
+            if (ecc){
+                logger.error("Cannot remove previous cache file: {}, so cache cannot be saved", cache_file.string());
+                return false;
+            }
+        }
+        logger.info("Trying to write storages to cache");
+        TRY
+            auto odo = YAS_OBJECT_NVP("storages", ("storages", storages));
+            auto odon = YAS_OBJECT_NVP("hash", ("hash", hash));
+            yas::file_ostream osf(cache_file.string().c_str());
+            // yas::binary_oarchive<yas::file_ostream> oaf(osf);
+            // oaf.serialize(oo);
+            // oaf.serialize(oon);
+            yas::save<yas::file|yas::json>(osf, odo);
+            yas::save<yas::file|yas::json>(osf, odon);
+            osf.flush();
+        CATCH_NOTHROW_RET("Error while writing cache (yas error)", false)
+        logger.info("Storages cache written to cache file: {}", cache_file.string());
+        return true;
+    }
+
+    const bool MDN_root::load_storages(std::map<fs::path, int>& _storages, const unsigned long hash){
+        std::map<std::string, int> storages;
+        logger.info("Trying to load cached storages");
+        fs::path cache_folder = cwd / folders::cache;
+        fs::path cache_file = cwd / folders::cache / files::storages_cache;
+        std::error_code ecc;
+        if (fs::exists(cache_folder, ecc)){
+                if(fs::exists(cache_file, ecc)){
+                    unsigned long _hash{};
+                    yas::file_istream isf(cache_file.string().c_str());
+                    yas::load<yas::file|yas::json>(isf, YAS_OBJECT_NVP(
+                        "storages", ("storages", storages)
+                        ));
+                    yas::load<yas::file|yas::json>(isf, YAS_OBJECT_NVP(
+                        "hash", ("hash", _hash)
+                        ));
+                    if (_hash == hash){
+                        for (const auto& [k, v]: storages){
+                            _storages.emplace(fs::path(k), v);
+                        }
+                        return true;
+                    }else{
+                        logger.warn("Cached storages mismatch hash, so storages will be computed and cached");
+                        return false;
+                    }
+                }else{
+                    if (!ecc){
+                        logger.warn("Cache file {} does not exists, so cache is not loaded", cache_file.string());
+                    }else{
+                        logger.warn("Cannot check cache file {} existense due to error {}, so cache is not loaded", cache_file.string(), ecc.message());
+                    }
+                    return false;
+                }
+        }else{
+            if (!ecc){
+                logger.warn("Cache directory {} does not exists, so cache is not loaded", cache_folder.string());
+            }else{
+                logger.warn("Cannot check cache directory {} existense due to error {}, so cache is not loaded", cache_folder.string(), ecc.message());
+            }
+            return false;
+        }
+        return false;
+    }
+
+    const std::map<fs::path, int> MDN_root::storage_rsolve(const json &_storages){
         adios2::ADIOS adios = adios2::ADIOS(MPI_COMM_SELF);
         adios2::IO io = adios.DeclareIO("Steps_reader");
         logger.debug("ADIOS2.IO initialized");
         std::map<fs::path, int> storages;
         int steps = 0;
         fs::path rsolved_storage;
-        for (const auto &storage : _storages.items())
-        {
+        for (const auto &storage : _storages.items()){
             TRY
             rsolved_storage = fs::absolute(storage.key());
             logger.trace("Storage '{}', resolved path: {}", storage.key(), rsolved_storage.string());
@@ -47,12 +125,10 @@ namespace mdn {
             logger.trace("Storage '{}' contains {} steps", rsolved_storage.string(), steps);
             CATCH("Error while resolving storage: " + storage.key())
         }
-
         return storages;
     }
 
-    const uint64_t MDN_root::bearbeit(const fs::path &storage, double *dims)
-    {
+    const uint64_t MDN_root::bearbeit(const fs::path &storage, double *dims){
         adios2::ADIOS adios = adios2::ADIOS();
         adios2::IO io = adios.DeclareIO("PReader");
         adios2::Engine reader;
@@ -88,12 +164,10 @@ namespace mdn {
         return Natoms;
     }
 
-    uint64_t MDN_root::dns(std::map<fs::path, std::pair<int, int>> &_distrib)
-    {
+    uint64_t MDN_root::dns(std::map<fs::path, std::pair<int, int>> &_distrib){
         logger.debug("Reading datafile");
         fs::path datafile_path = cwd / files::data;
-        if (!fs::exists(datafile_path))
-        {
+        if (!fs::exists(datafile_path)){
             logger.error("Datafile (file: '" + datafile_path.string() + "') does not exists");
             throw std::runtime_error("Datafile (file: '" + datafile_path.string() + "') does not exists");
         }
@@ -106,12 +180,14 @@ namespace mdn {
 
         logger.debug("Resolving storages");
         std::map<fs::path, int> storages;
-        TRY
-            storages = storage_rsolve(data.at(fields::storages));
-        CATCH("Error while resolving storages")
-        // {
-        //     logger.debug(std::string("Storage: ") + key.string() + std::string(" has ") + std::to_string(val) + std::string(" steps."));
-        // }
+
+        const unsigned long shash = std::hash<json>{}(data.at(fields::storages));
+        if (!load_storages(storages, shash)){
+            TRY
+                storages = storage_rsolve(data.at(fields::storages));
+            CATCH("Error while resolving storages")
+        }
+        save_storages(storages, shash);
 
         fs::path sto_check = storages.begin()->first;
         logger.debug("Simulation parameters will be obtained from storage: {}", sto_check.string());
@@ -168,8 +244,7 @@ namespace mdn {
         return Natoms;
     }
 
-    RETURN_CODES MDN_root::sanity()
-    {
+    RETURN_CODES MDN_root::sanity(){
         int rnd = std::rand();
         std::cout << "      Bcasting: " << rnd << std::endl;
         MPI_Bcast(&rnd, 1, MPI_INT, cs::mpi_root, wcomm);
@@ -178,8 +253,7 @@ namespace mdn {
         std::cout << "      Gathering..." << std::endl;
         MPI_Gather(&rnd, 1, MPI_INT, responces, 1, MPI_INT, cs::mpi_root, wcomm);
 
-        if (responces[0] != rnd)
-        {
+        if (responces[0] != rnd){
             std::cerr << "Root sanity doesn't passed" << std::endl;
             throw std::runtime_error("Root sanity doesn't passed");
         }
@@ -203,8 +277,7 @@ namespace mdn {
         return RETURN_CODES::OK;
     }
 
-    RETURN_CODES MDN_root::setup()
-    {
+    RETURN_CODES MDN_root::setup(){
         std::cout << "Sanity:" << std::endl;
         TRY
             sanity();
@@ -212,22 +285,16 @@ namespace mdn {
 
         std::error_code ec;
         fs::path log_folder = cwd / folders::log;
-        if (!fs::exists(log_folder))
-        {
-            if (!fs::create_directories(log_folder, ec))
-            {
+        if (!fs::exists(log_folder)){
+            if (!fs::create_directories(log_folder, ec)){
                 std::cerr << "Cannot create non-existent directories: " << log_folder.string() << std::endl;
                 std::cerr << "Error code: " << ec.value() << std::endl;
                 std::cerr << "Message: " << ec.message() << std::endl;
                 throw std::runtime_error("Cannot create non-existent directory: " + log_folder.string());
-            }
-            else
-            {
+            }else{
                 std::cout << "Created logging directory: " << log_folder << std::endl;
             }
-        }
-        else
-        {
+        }else{
             std::cout << "Logging folder exists" << std::endl;
         }
 
@@ -243,8 +310,7 @@ namespace mdn {
         return RETURN_CODES::OK;
     }
 
-    RETURN_CODES MDN_root::entry()
-    {
+    RETURN_CODES MDN_root::entry(){
         std::cout << "Setup..." << std::endl;
         TRY
         setup();
@@ -261,9 +327,9 @@ namespace mdn {
         logger.info("Output data will be written to {}", ss.string());
 
         logger.info("Starting calculations...");
-        // TRY
-        //     run(ss, distribution, Natoms);
-        // CATCH("Error while doing caculations")
+        TRY
+            run(ss, distribution, Natoms);
+        CATCH("Error while doing caculations")
 
         return RETURN_CODES::OK;
     }

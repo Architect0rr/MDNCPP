@@ -5,11 +5,13 @@
 #include <version>
 #include <filesystem>
 #include <unordered_set>
+#include <chrono>
 
 #include "adios2.h"
 #include "mpi.h"
 #include "utils.cpp"
 #include "constants.cpp"
+#include "config.hpp"
 
 #ifdef __cpp_lib_ranges_zip
     #include <ranges>
@@ -17,15 +19,47 @@
     #include "zip.cpp"
 #endif // !__cpp_lib_ranges_zip
 
+#ifdef __MDN_BUILD_DEBUG_CODE__
+    #define __MDN_PROFILING__
+#endif // !__MDN_BUILD_DEBUG_CODE__
+
 namespace mdn{
+
+    struct timer{
+        uint64_t counter = 0;
+        std::chrono::system_clock::time_point t1 = std::chrono::high_resolution_clock::now();
+        std::chrono::system_clock::time_point t2 = std::chrono::high_resolution_clock::now();
+        void start(){
+            t1 = std::chrono::high_resolution_clock::now();
+            t2 = t1;
+            counter = 0;
+        }
+        void cutoff(){
+            counter += 1;
+        }
+        void check(){
+            t2 = std::chrono::high_resolution_clock::now();
+        }
+        long double current(){
+            check();
+            if (counter > 0)
+                return std::chrono::duration<long double, std::milli>(t2 - t1).count() / counter;
+            else
+                return std::chrono::duration<long double, std::milli>(0).count();
+        }
+        long double count(){
+            return std::chrono::duration<long double, std::milli>(t2 - t1).count();
+        }
+    };
 
     namespace fs = std::filesystem;
     RETURN_CODES MDN::run(const fs::path &ws, const std::map<fs::path, std::pair<int, int>> &storages, const uint64_t _Natoms){
         adios2::ADIOS adios = adios2::ADIOS(MPI_COMM_SELF);
         adios2::IO dataio   = adios.DeclareIO("DATAWRITER");
         adios2::IO lmpsio   = adios.DeclareIO("LAMMPSReader");
-        dataio.SetEngine("BP5");
-        lmpsio.SetEngine("BP5");
+        dataio.SetEngine("BP4");
+        lmpsio.SetEngine("BP4");
+
 
         adios2::Engine writer = dataio.Open(ws, adios2::Mode::Write, MPI_COMM_SELF);
 
@@ -73,14 +107,38 @@ namespace mdn{
         adios2::Variable<double>   varAtoms;
         // id c_clusters mass vx vy vz x y z
 
-        for (const auto &[storage, steps] : storages)
-        {
+        #ifdef __MDN_PROFILING__
+            if (rank == 0)
+                std::cout << "Profiling enabled" << std::endl;
+            timer global_timer;
+            timer per_storage_timer;
+            timer per_step_timer;
+            global_timer.start();
+            per_storage_timer.start();
+        #endif // !__MDN_PROFILING__
+
+        for (const auto &[storage, steps] : storages){
+
             try{
                 adios2::Engine reader = lmpsio.Open(ws, adios2::Mode::Read, MPI_COMM_SELF);
+                // if (rank == 0)
+                //     std::cout << "Storage open, scrolling" << std::endl;
+
+                // varNstep  = lmpsio.InquireVariable<uint64_t>(std::string(lcf::timestep));
+                // varNatoms = lmpsio.InquireVariable<uint64_t>(std::string(lcf::natoms  ));
+                // varBoxxhi = lmpsio.InquireVariable<double>  (std::string(lcf::boxxhi  ));
+                // varBoxyhi = lmpsio.InquireVariable<double>  (std::string(lcf::boxyhi  ));
+                // varBoxzhi = lmpsio.InquireVariable<double>  (std::string(lcf::boxzhi  ));
+                // varBoxxlo = lmpsio.InquireVariable<double>  (std::string(lcf::boxxlo  ));
+                // varBoxylo = lmpsio.InquireVariable<double>  (std::string(lcf::boxylo  ));
+                // varBoxzlo = lmpsio.InquireVariable<double>  (std::string(lcf::boxzlo  ));
+                // varAtoms  = lmpsio.InquireVariable<double>  (std::string(lcf::atoms   ));
 
                 uint64_t currentStep = 0;
                 while (currentStep != steps.first)
                 {
+                    // if (rank == 0)
+                    //     std::cout << "Enter loop" << std::endl;
                     if (reader.BeginStep() == adios2::StepStatus::EndOfStream)
                     {
                         logger.error("End of stream happened while scrolling to begin step");
@@ -89,14 +147,31 @@ namespace mdn{
                     }
                     currentStep = reader.CurrentStep();
                     reader.EndStep();
+                    // if (rank == 0)
+                    //     std::cout << "Current step: " << currentStep << std::endl;
                 }
-
-
-                while (currentStep != steps.second)
+                // if (rank == 0)
+                //     std::cout << "End loop" << std::endl;
+                #ifdef __MDN_PROFILING__
+                    // if (rank == 0)
+                    //     std::cout << "Start timer" << std::endl;
+                    per_step_timer.start();
+                    // if (rank == 0)
+                    //     std::cout << "Timer started" << std::endl;
+                #endif // !__MDN_PROFILING__
+                if (rank == 0)
+                    std::cout << "Starting calculations" << std::endl;
+                while (currentStep != steps.first + steps.second)
                 {
+                    if (rank == 0)
+                        std::cout << "In loop" << std::endl;
                     if (reader.BeginStep() == adios2::StepStatus::EndOfStream)
+                        if (rank == 0)
+                            std::cout << "EOS" << std::endl;
                         break;
                     currentStep = reader.CurrentStep();
+                    if (rank == 0)
+                        std::cout << "Current step: " << currentStep << std::endl;
 
                     varNstep  = lmpsio.InquireVariable<uint64_t>(std::string(lcf::timestep));
                     varNatoms = lmpsio.InquireVariable<uint64_t>(std::string(lcf::natoms  ));
@@ -107,7 +182,11 @@ namespace mdn{
                     varBoxylo = lmpsio.InquireVariable<double>  (std::string(lcf::boxylo  ));
                     varBoxzlo = lmpsio.InquireVariable<double>  (std::string(lcf::boxzlo  ));
                     varAtoms  = lmpsio.InquireVariable<double>  (std::string(lcf::atoms   ));
+                    if (!(varNstep && varNatoms && varBoxxhi && varBoxyhi && varBoxzhi && varBoxxlo && varBoxylo && varBoxzlo && varAtoms)){
 
+                    }
+                    if (rank == 0)
+                        std::cout << "Inquired variables" << std::endl;
                     reader.Get(varNstep, timestep);
                     reader.Get(varNatoms, Natoms);
                     reader.Get(varBoxxhi, boxxhi);
@@ -116,7 +195,8 @@ namespace mdn{
                     reader.Get(varBoxxlo, boxxlo);
                     reader.Get(varBoxylo, boxylo);
                     reader.Get(varBoxzlo, boxzlo);
-
+                    if (rank == 0)
+                        std::cout << "Got variables" << std::endl;
                     Volume = abs((boxxhi - boxxlo) * (boxyhi - boxylo) * (boxzhi - boxzlo));
                     rho = Natoms / Volume;
 
@@ -181,7 +261,17 @@ namespace mdn{
                     std::fill(sizes_counts.begin(), sizes_counts.end(), 0);
                     kes.clear();
                     temps_by_size.clear();
+
+                    #ifdef __MDN_PROFILING__
+                        per_step_timer.cutoff();
+                        // if (global_timer.count() > 1000*60)
+                        std::cout << "Profiling: " << per_step_timer.current() << " ms per step, " << per_storage_timer.current() << " ms per storage" << std::endl;
+                        logger.info("Profiling: {} ms per step, {} ms per storage", per_step_timer.current(), per_storage_timer.current());
+                    #endif // !__MDN_PROFILING__
+
                 }
+                if (rank == 0)
+                    std::cout << "End storage" << std::endl;
 
                 reader.Close();
             }catch (std::logic_error& e){
@@ -197,7 +287,20 @@ namespace mdn{
                 logger.error("Error is not inherits std::exception, so exiting... Probably the whole program may be aborted");
                 throw;
             }
+            #ifdef __MDN_PROFILING__
+                per_storage_timer.cutoff();
+            #endif // !__MDN_PROFILING__
         }
+        #ifdef __MDN_PROFILING__
+            per_step_timer.check();
+            per_storage_timer.check();
+            global_timer.check();
+            global_timer.cutoff();
+            std::cout << "Profiling: " << per_step_timer.current() << " ms per step, " << per_storage_timer.current() << " ms per storage" << std::endl;
+            std::cout << "Profiling: " << global_timer.current() << " ms total wall time" << std::endl;
+            logger.info("Final profiling results: {} ms per step, {} ms per storage", per_step_timer.current(), per_storage_timer.current());
+            logger.info("Profiling: {} ms total wall time", global_timer.current());
+        #endif // !__MDN_PROFILING__
 
         return RETURN_CODES::OK;
     }

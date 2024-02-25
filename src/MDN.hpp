@@ -39,6 +39,18 @@
         logger.error(mess);                                          \
     }
 
+#define CATCH_NOTHROW_RET(mess, obj)                                 \
+    }catch (std::exception & e){                                     \
+        logger.error("Some std::exception was thrown. Context:");    \
+        logger.error(mess);                                          \
+        logger.error(e.what());                                      \
+        return obj;                                                  \
+    }catch (...){                                                    \
+        logger.error("Some unknown exception was thrown. Context:"); \
+        logger.error(mess);                                          \
+        return obj;                                                  \
+    }
+
 #endif // !__MDN_TRY_CATCH_MACRO__
 
 #include <filesystem>
@@ -115,6 +127,10 @@ namespace mdn{
         const int get_total_steps(adios2::IO &, const fs::path &);
         RETURN_CODES distribute(const std::map<fs::path, int> &, std::map<fs::path, std::pair<int, int>> &);
         std::map<int, std::map<fs::path, std::pair<int, int>>> make_distribution(const std::map<fs::path, int> &);
+        const bool save_distribution(const std::map<int, std::map<std::string, std::pair<int, int>>>&);
+        const bool load_distribution(std::map<int, std::map<std::string, std::pair<int, int>>>&);
+        const bool save_storages(const std::map<fs::path, int>&, const unsigned long);
+        const bool load_storages(std::map<fs::path, int>&, const unsigned long);
     };
 
     class MDN_nonroot : public MDN{

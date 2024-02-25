@@ -121,7 +121,7 @@ include_directories(${ADIOS2_DIR})
 
 
 add_executable(${PROJECT_NAME} ${PROJECT_SOURCE_DIR}/src/MDNCPP.cpp)
-add_executable(AWTest ${PROJECT_SOURCE_DIR}/tests/ADIOS_writer.cpp)
+add_executable(AWTest ${PROJECT_SOURCE_DIR}/tests/variables.cpp)
 
 target_link_libraries(${PROJECT_NAME} PUBLIC MPI::MPI_CXX)
 target_link_libraries(${PROJECT_NAME} PUBLIC OpenMP::OpenMP_CXX)
@@ -134,7 +134,6 @@ target_link_libraries(AWTest PRIVATE adios2::cxx11_mpi MPI::MPI_C)
 add_dependencies(${PROJECT_NAME} spdlog)
 add_dependencies(${PROJECT_NAME} argparse)
 add_dependencies(${PROJECT_NAME} json)
-
 
 add_dependencies(AWTest spdlog)
 add_dependencies(AWTest argparse)
