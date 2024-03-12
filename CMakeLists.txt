@@ -2,13 +2,14 @@ cmake_minimum_required(VERSION 3.0.0)
 project(MDNCPP VERSION 0.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
+set(CSV_CXX_STANDARD   20)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 
 include(CTest)
 enable_testing()
 include(ExternalProject)
 
-set(CMAKE_STAGING_PREFIX ${PROJECT_SOURCE_DIR}/build/stage)
+add_definitions(-DMDNCPP_VERSION="0.1.1")
 
 if(NOT DEFINED CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
@@ -19,9 +20,14 @@ if(CMAKE_BUILD_TYPE STREQUAL Debug)
     add_definitions(-DMDNCPP_BUILD_DEBUG)
 endif()
 
-add_definitions(-DMDNCPP_VERSION="0.1.1")
+if(DEFINED MDNCPP_PROFILING)
+    if(MDNCPP_PROFILING STREQUAL ON)
+        message("Profiling on")
+        add_definitions(-DMDNCPP_ENABLE_PROFILING)
+    endif()
+endif()
 
-
+set(CMAKE_STAGING_PREFIX ${PROJECT_SOURCE_DIR}/build/stage)
 set(CMAKE_CXX_FLAGS_Release "-O3")
 set(CMAKE_CXX_FLAGS_Debug "-Wall")
 
@@ -112,20 +118,32 @@ ExternalProject_Add(json
     -DJSON_BuildTests=OFF
 )
 
+# ExternalProject_Add(csv
+#     PREFIX csv
+#     SOURCE_DIR ${PROJECT_SOURCE_DIR}/lib/csv-parser
+#     CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+#     -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
+#     -DCMAKE_INSTALL_PREFIX=${CMAKE_STAGING_PREFIX}
+#     -DBUILD_SHARED_LIBS=OFF
+# )
+
+# add_subdirectory(${PROJECT_SOURCE_DIR}/lib/csv-parser)
+
 configure_file(${PROJECT_SOURCE_DIR}/src/config.hpp.in ${PROJECT_SOURCE_DIR}/src/config.hpp @ONLY)
 include_directories(${PROJECT_SOURCE_DIR}/lib/spdlog/include)
 include_directories(${PROJECT_SOURCE_DIR}/lib/argparse/include)
 include_directories(${PROJECT_SOURCE_DIR}/lib/json/include)
 include_directories(${PROJECT_SOURCE_DIR}/lib/yas/include)
+# include_directories(${PROJECT_SOURCE_DIR}/lib/csv-parser/single_include)
 include_directories(${ADIOS2_DIR})
-
 
 add_executable(${PROJECT_NAME} ${PROJECT_SOURCE_DIR}/src/MDNCPP.cpp)
 add_executable(AWTest ${PROJECT_SOURCE_DIR}/tests/variables.cpp)
 
-target_link_libraries(${PROJECT_NAME} PUBLIC MPI::MPI_CXX)
-target_link_libraries(${PROJECT_NAME} PUBLIC OpenMP::OpenMP_CXX)
+target_link_libraries(${PROJECT_NAME} PUBLIC  MPI::MPI_CXX)
+target_link_libraries(${PROJECT_NAME} PUBLIC  OpenMP::OpenMP_CXX)
 target_link_libraries(${PROJECT_NAME} PRIVATE adios2::cxx11_mpi MPI::MPI_C)
+# target_link_libraries(${PROJECT_NAME} PUBLIC  csv)
 
 target_link_libraries(AWTest PUBLIC MPI::MPI_CXX)
 target_link_libraries(AWTest PUBLIC OpenMP::OpenMP_CXX)
@@ -134,6 +152,7 @@ target_link_libraries(AWTest PRIVATE adios2::cxx11_mpi MPI::MPI_C)
 add_dependencies(${PROJECT_NAME} spdlog)
 add_dependencies(${PROJECT_NAME} argparse)
 add_dependencies(${PROJECT_NAME} json)
+# add_dependencies(${PROJECT_NAME} csv)
 
 add_dependencies(AWTest spdlog)
 add_dependencies(AWTest argparse)

@@ -99,7 +99,7 @@ namespace mdn{
         std::string_view prefix;
 
         void setup_logger(const int);
-        RETURN_CODES run(const fs::path &, const std::map<fs::path, std::pair<int, int>> &, const uint64_t);
+        RETURN_CODES run(const fs::path &, const std::map<fs::path, std::pair<int, int>> &, const uint64_t, uint64_t&);
 
         // funcitons different for (non) root workers
         virtual RETURN_CODES entry() = 0;
@@ -131,6 +131,8 @@ namespace mdn{
         const bool load_distribution(std::map<int, std::map<std::string, std::pair<int, int>>>&);
         const bool save_storages(const std::map<fs::path, int>&, const unsigned long);
         const bool load_storages(std::map<fs::path, int>&, const unsigned long);
+        void gather_storages(std::map<int, std::string>&);
+        void gen_matrix(std::map<int, std::string>&, const uint64_t, const u_int64_t);
     };
 
     class MDN_nonroot : public MDN{

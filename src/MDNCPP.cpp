@@ -25,8 +25,8 @@ namespace mdn{
         TRY
         entry();
         CATCH_NOLOGGER("Error in entry point")
+        logger.info("Worker shutdown");
         spdlog::shutdown();
-
         return RETURN_CODES::OK;
     }
 

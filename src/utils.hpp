@@ -6,7 +6,8 @@ namespace mdn{
     enum MPI_TAGS : int
     {
         SANITY,
-        STATE
+        STATE,
+        STOR
     };
 
     enum RETURN_CODES : int

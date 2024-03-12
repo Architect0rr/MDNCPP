@@ -7,6 +7,8 @@
 
 #include <filesystem>
 #include <chrono>
+#include <fstream>
+#include <span>
 
 #include "argparse/argparse.hpp"
 
@@ -99,15 +101,16 @@ namespace mdn{
         fs::path log_folder = cwd / folders::log;
         fs::path log_file = log_folder / (std::to_string(rank) + ".log");
 
-        console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
-        console_sink->set_level(spdlog::level::trace);
+        // console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+        // console_sink->set_level(spdlog::level::trace);
 
-        file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(log_file);
+        file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(log_file, true);
         file_sink->set_level(spdlog::level::trace);
 
-        logger = spdlog::logger(std::string("Rank") + std::to_string(rank), {console_sink, file_sink});
+        // logger = spdlog::logger(std::string("Rank") + std::to_string(rank), {console_sink, file_sink});
+        logger = spdlog::logger(std::string("Rank") + std::to_string(rank), {file_sink});
         logger.set_level(spdlog::level::trace);
-        spdlog::flush_every(std::chrono::seconds(10));
+        // spdlog::flush_every(std::chrono::seconds(10));
     }
 
     RETURN_CODES MDN::parse_args(const int argc, const char ***argv)
@@ -254,6 +257,80 @@ namespace mdn{
 
         return RETURN_CODES::OK;
     }
+
+    struct timer{
+        uint64_t counter = 0;
+        std::chrono::system_clock::time_point t1 = std::chrono::high_resolution_clock::now();
+        std::chrono::system_clock::time_point t2 = std::chrono::high_resolution_clock::now();
+        long double s = 0;
+        void start(){
+            t1 = std::chrono::high_resolution_clock::now();
+            t2 = t1;
+            counter = 0;
+        }
+        void cutoff(){
+            counter += 1;
+        }
+        void b(){
+            t1 = std::chrono::high_resolution_clock::now();
+            t2 = t1;
+        }
+        void e(){
+            t2 = std::chrono::high_resolution_clock::now();
+            counter += 1;
+            s += std::chrono::duration<long double, std::milli>(t2 - t1).count();
+        }
+        long double sum(){
+            return s / counter;
+        }
+        void check(){
+            t2 = std::chrono::high_resolution_clock::now();
+        }
+        long double current(){
+            check();
+            if (counter > 0)
+                return std::chrono::duration<long double, std::milli>(t2 - t1).count() / counter;
+            else
+                return std::chrono::duration<long double, std::milli>(0).count();
+        }
+        long double count(){
+            return std::chrono::duration<long double, std::milli>(t2 - t1).count();
+        }
+    };
+
+    // template<typename>
+    struct csvWriter{
+        std::ofstream str;
+        csvWriter(const fs::path& file){str.open(file, std::ios_base::out);}
+        ~csvWriter() {str.close();}
+
+        template<typename T>
+        csvWriter& operator<<(const std::span<T>& arr){
+        for (size_t i = 0; i < arr.size() - 1; ++i)
+            str << arr[i] << ',';
+            str << arr[arr.size() - 1];
+            return *this;
+        }
+
+        template<typename T>
+        csvWriter& operator<<(const T& el){
+            str << el << ',';
+            return *this;
+        }
+
+        void flush(){
+            str.flush();
+        }
+    };
+
+    // template<typename T>
+    // csvWriter& csvWriter::operator<<(const std::span<T>& arr){
+    //     for (size_t i = 0; i < arr.size() - 1; ++i)
+    //         str << arr[i] << ',';
+    //     str << arr[arr.size() - 1];
+    //     return *this;
+    // }
+
 } // namespace
 
 #endif // !__MDN_utils_CPP__

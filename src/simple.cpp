@@ -166,12 +166,14 @@ namespace mdn {
 
         if (args.cache){
             const bool cache_loaded = load_distribution(_distribution);
+            ds2p(distribution, _distribution);
             if (!cache_loaded)
                 distribution = make_distribution(storages);
+                dp2s(distribution, _distribution);
         }else{
             distribution = make_distribution(storages);
+            dp2s(distribution, _distribution);
         }
-        dp2s(distribution, _distribution);
 
 
         logger.debug("Completed distribution:");
@@ -182,16 +184,13 @@ namespace mdn {
             }
         }
 
-        yas::mem_ostream os;
-        yas::binary_oarchive<yas::mem_ostream> oa(os);
-
-        auto oo = YAS_OBJECT("distribution", ("i", _distribution));
-        // auto oon = YAS_OBJECT("NW", ("NWM", size));
-
         if (args.cache){
             save_distribution(_distribution);
         }
 
+        yas::mem_ostream os;
+        yas::binary_oarchive<yas::mem_ostream> oa(os);
+        auto oo = YAS_OBJECT("distribution", ("i", _distribution));
         oa.serialize(oo);
         auto buf = os.get_intrusive_buffer();
 

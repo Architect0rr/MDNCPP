@@ -3,6 +3,7 @@
 
 #include "nlohmann/json.hpp"
 #include "adios2.h"
+// #include "csv.hpp"
 
 #include "mpi.h"
 
@@ -274,7 +275,94 @@ namespace mdn {
         SANITY_BARRIER(wcomm);
         std::cout << "      Sanity barrier released" << std::endl;
 
+        delete[] responces;
         return RETURN_CODES::OK;
+    }
+
+    void MDN_root::gather_storages(std::map<int, std::string>& storages){
+        std::set<int> ncw;
+        for (int i = 1; i < size; ++i) ncw.emplace(i);
+        MPI_Status status;
+        int flag = 0;
+        int count{};
+        while (!ncw.empty()){
+            for (const int i : ncw){
+                MPI_Iprobe(i, MPI_TAGS::STOR, wcomm, &flag, &status);
+                if (flag){
+                    MPI_Get_count(&status, MPI_CHAR, &count);
+                    char* buf = new char[count];
+                    MPI_Recv(buf, count, MPI_CHAR, i, MPI_TAGS::STOR, wcomm, &status);
+                    storages.emplace(i, std::string(buf, count));
+                    delete buf;
+                    flag = 0;
+                    status = MPI_Status();
+                    ncw.erase(i);
+                }
+            }
+        }
+    }
+
+    void MDN_root::gen_matrix(std::map<int, std::string>& storages, const uint64_t Natoms, const u_int64_t max_cluster_size){
+        adios2::ADIOS adios = adios2::ADIOS(MPI_COMM_SELF);
+        adios2::IO dataio   = adios.DeclareIO("DATAREADER");
+        dataio.SetEngine("BP4");
+
+        adios2::Variable<uint64_t> WvarNstep;
+        adios2::Variable<uint64_t> WvarN;
+        adios2::Variable<uint64_t> WvarDist;
+        adios2::Variable<double>   WvarTemps;
+        adios2::Variable<double>   WvarVol;
+        adios2::Variable<double>   WvarTTemp;
+
+        std::unique_ptr<uint64_t[]> _sizes_counts(new uint64_t[Natoms + 1]);
+        std::unique_ptr<double[]> _temps_by_size(new double[Natoms + 1]);
+        std::span<const uint64_t> sizes_counts(_sizes_counts.get(), max_cluster_size);
+        std::span<const double> temps_by_size(_temps_by_size.get(), max_cluster_size);
+
+        uint64_t timestep{}, _Natoms{};
+        double Volume{}, total_temp{};
+        std::cout << std::endl;
+        // std::vector<uint64_t> sizes_counts(Natoms + 1, 0UL);
+        // std::vector<double> temps_by_size(Natoms + 1, 0.0);
+
+        // std::ofstream matrix_csv_file(args.outfile.parent_path() / files::matrix_csv, std::ios_base::out);
+        // std::ofstream temps_csv_file(args.outfile.parent_path() / files::temps_csv, std::ios_base::out);
+        // auto matrix_writer = csv::make_csv_writer(matrix_csv_file);
+        // auto temps_writer = csv::make_csv_writer(temps_csv_file);
+        csvWriter matrix_writer(args.outfile.parent_path() / files::matrix_csv);
+        csvWriter temps_writer(args.outfile.parent_path() / files::temps_csv);
+
+        for (const auto&[rank, storage] : storages){
+            adios2::Engine reader = dataio.Open(storage, adios2::Mode::Read, MPI_COMM_SELF);
+            uint64_t currentStep = 0;
+            while ((reader.BeginStep() == adios2::StepStatus::EndOfStream)){
+                currentStep = reader.CurrentStep();
+
+                WvarNstep  = dataio.InquireVariable<uint64_t>("ntimestep");
+                WvarN      = dataio.InquireVariable<uint64_t>("Natoms");
+                WvarDist   = dataio.InquireVariable<uint64_t>("dist");
+                WvarTemps  = dataio.InquireVariable<double>("temps");
+                WvarVol    = dataio.InquireVariable<double>("volume");
+                WvarTTemp  = dataio.InquireVariable<double>("total_temp");
+
+                if (!(WvarNstep && WvarN && WvarDist && WvarTemps && WvarVol && WvarTTemp))
+                    continue;
+
+                reader.Put(WvarNstep, timestep);
+                reader.Put(WvarDist,   _sizes_counts.get());
+                reader.Put(WvarVol,   Volume);
+                reader.Put(WvarN,     _Natoms);
+                reader.Put(WvarTTemp, total_temp);
+                reader.Put(WvarTemps,  _temps_by_size.get());
+
+                matrix_writer << timestep << _Natoms << sizes_counts << "\n";
+                temps_writer << timestep << total_temp << temps_by_size << "\n";
+
+                reader.EndStep();
+            }
+            matrix_writer.flush();
+            temps_writer.flush();
+        }
     }
 
     RETURN_CODES MDN_root::setup(){
@@ -313,24 +401,47 @@ namespace mdn {
     RETURN_CODES MDN_root::entry(){
         std::cout << "Setup..." << std::endl;
         TRY
-        setup();
+            setup();
         CATCH_NOLOGGER("Error wahile setting up")
         logger.info("Initialized");
 
         std::map<fs::path, std::pair<int, int>> distribution;
+        uint64_t summ = 0;
         uint64_t Natoms{};
         TRY
             Natoms = dns(distribution);
         CATCH("Error while getting distribution")
+        for (const auto &[k,v]: distribution){
+            logger.info("{}: {}({}) - {}", k.string(), v.first, v.second, v.first + v.second);
+            summ += v.second;
+        }
+        logger.info("Total: {}", summ);
 
-        fs::path ss = args.outfile / (args.outfile.filename().string() + "." + std::to_string(rank));
+        fs::path ss = args.outfile.parent_path() / (args.outfile.filename().string() + "." + std::to_string(rank));
         logger.info("Output data will be written to {}", ss.string());
 
+        uint64_t max_cluster_size = 0;
         logger.info("Starting calculations...");
         TRY
-            run(ss, distribution, Natoms);
+            run(ss, distribution, Natoms, max_cluster_size);
         CATCH("Error while doing caculations")
+        logger.info("Calculations ended, gathering result info");
 
+        uint64_t *max_sizes = new uint64_t[size];
+        MPI_Gather(&max_cluster_size, 1, MPI_UINT64_T, max_sizes, 1, MPI_UINT64_T, cs::mpi_root, wcomm);
+        max_cluster_size = *std::max_element(max_sizes, max_sizes + size);
+        delete max_sizes;
+        logger.debug("Gathered max cluster size");
+
+        std::map<int, std::string> storages;
+        gather_storages(storages);
+        storages.emplace(rank, ss.string());
+        logger.debug("Gathered storages");
+
+        logger.info("Generating output matrices");
+        gen_matrix(storages, Natoms, max_cluster_size);
+
+        logger.info("Exiting entry point. NO RETURN");
         return RETURN_CODES::OK;
     }
 } // namespace mdn

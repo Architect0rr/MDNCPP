@@ -103,19 +103,34 @@ namespace mdn{
 
         logger.debug("Getting distribution");
         std::map<fs::path, std::pair<int, int>> distribution;
+        uint64_t summ = 0;
         uint64_t Natoms{};
         TRY
             Natoms = dns(distribution);
         CATCH("Error while getting distribution")
+        for (const auto &[k,v]: distribution){
+            logger.info("{}: {}({}) - {}", k.string(), v.first, v.second, v.first + v.second);
+            summ += v.second;
+        }
+        logger.info("Total: {}", summ);
 
-        fs::path ss = args.outfile / (args.outfile.filename().string() + "." + std::to_string(rank));
+        fs::path ss = args.outfile.parent_path() / (args.outfile.filename().string() + "." + std::to_string(rank));
         logger.info("Output data will be written to {}", ss.string());
 
+        uint64_t max_cluster_size = 0;
         logger.info("Starting calculations...");
         TRY
-            run(ss, distribution, Natoms);
+            run(ss, distribution, Natoms, max_cluster_size);
         CATCH("Error while doing caculations")
+        logger.info("Calculations ended, sending result info");
 
+        int *responces = NULL;
+        MPI_Gather(&max_cluster_size, 1, MPI_UINT64_T, responces, 0, MPI_UINT64_T, cs::mpi_root, wcomm);
+
+        const char * storpath = ss.string().c_str();
+        MPI_Send(ss.string().c_str(), ss.string().length(), MPI_CHAR, cs::mpi_root, MPI_TAGS::STOR, wcomm);
+
+        logger.info("Exiting entry point. NO RETURN");
         return RETURN_CODES::OK;
     }
 
