@@ -57,6 +57,10 @@ if(NOT TARGET OpenMP::OpenMP_CXX)
 
 endif()
 
+
+# find_package(Matplot++ REQUIRED)
+
+
 ExternalProject_Add(spdlog
     PREFIX spdlog
     SOURCE_DIR ${PROJECT_SOURCE_DIR}/lib/spdlog
@@ -118,41 +122,31 @@ ExternalProject_Add(json
     -DJSON_BuildTests=OFF
 )
 
-# ExternalProject_Add(csv
-#     PREFIX csv
-#     SOURCE_DIR ${PROJECT_SOURCE_DIR}/lib/csv-parser
-#     CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
-#     -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
-#     -DCMAKE_INSTALL_PREFIX=${CMAKE_STAGING_PREFIX}
-#     -DBUILD_SHARED_LIBS=OFF
-# )
-
-# add_subdirectory(${PROJECT_SOURCE_DIR}/lib/csv-parser)
-
 configure_file(${PROJECT_SOURCE_DIR}/src/config.hpp.in ${PROJECT_SOURCE_DIR}/src/config.hpp @ONLY)
 include_directories(${PROJECT_SOURCE_DIR}/lib/spdlog/include)
 include_directories(${PROJECT_SOURCE_DIR}/lib/argparse/include)
 include_directories(${PROJECT_SOURCE_DIR}/lib/json/include)
 include_directories(${PROJECT_SOURCE_DIR}/lib/yas/include)
-# include_directories(${PROJECT_SOURCE_DIR}/lib/csv-parser/single_include)
+# include_directories(/home/kein/repos/matplotplusplus/source)
 include_directories(${ADIOS2_DIR})
 
 add_executable(${PROJECT_NAME} ${PROJECT_SOURCE_DIR}/src/MDNCPP.cpp)
 add_executable(AWTest ${PROJECT_SOURCE_DIR}/tests/variables.cpp)
+# add_executable(cff ${PROJECT_SOURCE_DIR}/tests/cf.cpp)
 
 target_link_libraries(${PROJECT_NAME} PUBLIC  MPI::MPI_CXX)
 target_link_libraries(${PROJECT_NAME} PUBLIC  OpenMP::OpenMP_CXX)
 target_link_libraries(${PROJECT_NAME} PRIVATE adios2::cxx11_mpi MPI::MPI_C)
-# target_link_libraries(${PROJECT_NAME} PUBLIC  csv)
 
 target_link_libraries(AWTest PUBLIC MPI::MPI_CXX)
 target_link_libraries(AWTest PUBLIC OpenMP::OpenMP_CXX)
 target_link_libraries(AWTest PRIVATE adios2::cxx11_mpi MPI::MPI_C)
 
+# target_link_libraries(cff Matplot++::matplot)
+
 add_dependencies(${PROJECT_NAME} spdlog)
 add_dependencies(${PROJECT_NAME} argparse)
 add_dependencies(${PROJECT_NAME} json)
-# add_dependencies(${PROJECT_NAME} csv)
 
 add_dependencies(AWTest spdlog)
 add_dependencies(AWTest argparse)
