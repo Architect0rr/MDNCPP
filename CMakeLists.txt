@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.0.0)
+cmake_minimum_required(VERSION 3.18.0)
 project(MDNCPP VERSION 0.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -58,99 +58,32 @@ if(NOT TARGET OpenMP::OpenMP_CXX)
 endif()
 
 
-# find_package(Matplot++ REQUIRED)
+find_package(spdlog REQUIRED)
+find_package(nlohmann_json REQUIRED)
+find_package(fmt)
 
-
-ExternalProject_Add(spdlog
-    PREFIX spdlog
-    SOURCE_DIR ${PROJECT_SOURCE_DIR}/lib/spdlog
-    CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
-    -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
-    -DCMAKE_INSTALL_PREFIX=${CMAKE_STAGING_PREFIX}
-    # -DSPDLOG_MASTER_PROJECT=OFF
-    # -DSPDLOG_BUILD_EXAMPLE=OFF
-    # -DSPDLOG_BUILD_EXAMPLE_HO=OFF
-    # -DSPDLOG_BUILD_TESTS=OFF
-    # -DSPDLOG_BUILD_TESTS_HO=OFF
-    # -DSPDLOG_BUILD_SHARED=ON
+include(FetchContent)
+FetchContent_Declare(
+    argparse
+    GIT_REPOSITORY https://github.com/p-ranav/argparse.git
 )
+FetchContent_MakeAvailable(argparse)
 
-ExternalProject_Add(argparse
-    PREFIX argparse
-    SOURCE_DIR ${PROJECT_SOURCE_DIR}/lib/argparse
-    CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
-    -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
-    -DCMAKE_INSTALL_PREFIX=${CMAKE_STAGING_PREFIX}
-    -DBUILD_SHARED_LIBS=OFF
-    -DARGPARSE_BUILD_SAMPLES=OFF
-    -DARGPARSE_BUILD_TESTS=OFF
-)
-
-# ExternalProject_Add(adios2
-#     PREFIX adios2
-#     SOURCE_DIR ${PROJECT_SOURCE_DIR}/lib/adios2
-#     CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
-#     -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
-#     -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
-#     -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
-#     -DCMAKE_INSTALL_PREFIX=${CMAKE_STAGING_PREFIX}
-#     -DBUILD_SHARED_LIBS=OFF
-#     -DADIOS2_BUILD_EXAMPLES=OFF
-#     -DBUILD_TESTING=OFF
-#     -DADIOS2_USE_MPI=ON
-#     # -DMPI_CXX_FOUND=${MPI_CXX_FOUND}
-#     # -DMPI_CXX_COMPILER=${MPI_CXX_COMPILER}
-#     # -DMPI_CXX_COMPILE_FLAGS=${MPI_CXX_COMPILE_FLAGS}
-#     # -DMPI_CXX_INCLUDE_PATH=${MPI_CXX_INCLUDE_PATH}
-#     # -DMPI_CXX_LINK_FLAGS=${MPI_CXX_LINK_FLAGS}
-#     # -DMPI_CXX_LIBRARIES=${MPI_CXX_LIBRARIES}
-#     # -DMPI_C_FOUND=${MPI_C_FOUND}
-#     # -DMPI_C_COMPILER=${MPI_C_COMPILER}
-#     # -DMPI_C_COMPILE_FLAGS=${MPI_C_COMPILE_FLAGS}
-#     # -DMPI_C_INCLUDE_PATH=${MPI_C_INCLUDE_PATH}
-#     # -DMPI_C_LINK_FLAGS=${MPI_C_LINK_FLAGS}
-#     # -DMPI_C_LIBRARIES=${MPI_C_LIBRARIES}
-# )
-
-ExternalProject_Add(json
-    PREFIX json
-    SOURCE_DIR ${PROJECT_SOURCE_DIR}/lib/json
-    CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
-    -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
-    -DCMAKE_INSTALL_PREFIX=${CMAKE_STAGING_PREFIX}
-    -DBUILD_SHARED_LIBS=OFF
-    -DJSON_BuildTests=OFF
-)
+add_library(yas INTERFACE)
+target_include_directories(yas INTERFACE ${PROJECT_SOURCE_DIR}/lib/yas/include)
 
 configure_file(${PROJECT_SOURCE_DIR}/src/config.hpp.in ${PROJECT_SOURCE_DIR}/src/config.hpp @ONLY)
-include_directories(${PROJECT_SOURCE_DIR}/lib/spdlog/include)
-include_directories(${PROJECT_SOURCE_DIR}/lib/argparse/include)
-include_directories(${PROJECT_SOURCE_DIR}/lib/json/include)
-include_directories(${PROJECT_SOURCE_DIR}/lib/yas/include)
-# include_directories(/home/kein/repos/matplotplusplus/source)
-include_directories(${ADIOS2_DIR})
 
 add_executable(${PROJECT_NAME} ${PROJECT_SOURCE_DIR}/src/MDNCPP.cpp)
-add_executable(AWTest ${PROJECT_SOURCE_DIR}/tests/variables.cpp)
-# add_executable(cff ${PROJECT_SOURCE_DIR}/tests/cf.cpp)
 
 target_link_libraries(${PROJECT_NAME} PUBLIC  MPI::MPI_CXX)
 target_link_libraries(${PROJECT_NAME} PUBLIC  OpenMP::OpenMP_CXX)
 target_link_libraries(${PROJECT_NAME} PRIVATE adios2::cxx11_mpi MPI::MPI_C)
-
-target_link_libraries(AWTest PUBLIC MPI::MPI_CXX)
-target_link_libraries(AWTest PUBLIC OpenMP::OpenMP_CXX)
-target_link_libraries(AWTest PRIVATE adios2::cxx11_mpi MPI::MPI_C)
-
-# target_link_libraries(cff Matplot++::matplot)
-
-add_dependencies(${PROJECT_NAME} spdlog)
-add_dependencies(${PROJECT_NAME} argparse)
-add_dependencies(${PROJECT_NAME} json)
-
-add_dependencies(AWTest spdlog)
-add_dependencies(AWTest argparse)
-add_dependencies(AWTest json)
+target_link_libraries(${PROJECT_NAME} PRIVATE spdlog)
+target_link_libraries(${PROJECT_NAME} PRIVATE argparse)
+target_link_libraries(${PROJECT_NAME} PRIVATE fmt::fmt)
+target_link_libraries(${PROJECT_NAME} PRIVATE nlohmann_json::nlohmann_json)
+target_link_libraries(${PROJECT_NAME} PRIVATE yas)
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})

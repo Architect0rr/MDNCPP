@@ -4,12 +4,12 @@
 #include "adios2.h"
 #include "nlohmann/json.hpp"
 
-#include <yas/serialize.hpp>
-#include <yas/object.hpp>
-#include <yas/std_types.hpp>
-#include <yas/mem_streams.hpp>
-#include <yas/binary_iarchive.hpp>
-#include <yas/binary_oarchive.hpp>
+#include "../lib/yas/include/yas/serialize.hpp"
+#include "../lib/yas/include/yas/object.hpp"
+#include "../lib/yas/include/yas/std_types.hpp"
+#include "../lib/yas/include/yas/mem_streams.hpp"
+#include "../lib/yas/include/yas/binary_iarchive.hpp"
+#include "../lib/yas/include/yas/binary_oarchive.hpp"
 
 #include "mpi.h"
 

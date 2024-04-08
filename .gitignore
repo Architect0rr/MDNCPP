@@ -7,3 +7,4 @@ _CmakeLists.txt
 rsync.ex
 src/config.hpp
 .git
+s.vscode
