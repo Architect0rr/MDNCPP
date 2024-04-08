@@ -9,10 +9,10 @@
 
 #include "mpi.h"
 
-#include "utils.cpp"
-#include "constants.cpp"
-#include "barriers.cpp"
-#include "logic.cpp"
+#include "utils.hpp"
+#include "constants.hpp"
+#include "barriers.hpp"
+#include "logic.hpp"
 #include "MDN.hpp"
 
 namespace mdn{

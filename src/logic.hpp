@@ -10,14 +10,14 @@
 
 #include "adios2.h"
 #include "mpi.h"
-#include "utils.cpp"
-#include "constants.cpp"
+#include "enums.hpp"
+#include "constants.hpp"
 #include "config.hpp"
 
 #ifdef __cpp_lib_ranges_zip
     #include <ranges>
 #else
-    #include "zip.cpp"
+    #include "zip.hpp"
 #endif // !__cpp_lib_ranges_zip
 
 #ifdef __MDN_BUILD_DEBUG_CODE__
@@ -34,17 +34,6 @@
 
 
 namespace mdn{
-    // template<typename T>
-    // std::vector<T> linspace(T start, T stop, size_t number){
-    //     std::vector<T> a;
-    //     a.resize(number);
-    //     T dx = (stop - start) / number;
-    //     for (auto& el : a){
-    //         el = start;
-    //         start += dx;
-    //     }
-    //     return a;
-    // }
 
     template <typename T, uint64_t N>
     constexpr std::array<T, N> _linspace(T start, T stop){
@@ -71,26 +60,13 @@ namespace mdn{
         return lv;
     }
 
-
-    // // template <typename T, typename Alloc, template<typename A, typename _Alloc> class C, uint64_t N>
-    // // template <template<class, class> class C, typename T, typename Alloc, uint64_t N>
-    // template<uint64_t N>
-    // std::array<size_t, N> histogram(const std::vector<double>& arr, double min, double max){
-    //     std::array<size_t, N> hist(N, 0);
-    //     double bin_w = (max - min) / N;
-    //     for (const double& el : arr)
-    //         ++(hist[static_cast<size_t>((el - min) / bin_w)]);
-    //     return hist;
-    // }
-
-
     namespace fs = std::filesystem;
     RETURN_CODES MDN::run(const fs::path &ws, const std::map<fs::path, std::pair<int, int>> &storages, const uint64_t _Natoms, uint64_t& max_cluster_size){
-        adios2::ADIOS adios = adios2::ADIOS(MPI_COMM_SELF);
-        adios2::IO dataio   = adios.DeclareIO("DATAWRITER");
+        adios2::ADIOS adios = adios2::ADIOS("adios2_BP4_config.xml", MPI_COMM_SELF);
+        adios2::IO dataio   = adios.DeclareIO("DataWriter");
         adios2::IO lmpsio   = adios.DeclareIO("LAMMPSReader");
-        dataio.SetEngine("BP4");
-        lmpsio.SetEngine("BP4");
+        // dataio.SetEngine("BP4");
+        // lmpsio.SetEngine("BP4");
 
         adios2::Engine writer = dataio.Open(ws, adios2::Mode::Write, MPI_COMM_SELF);
 

@@ -3,15 +3,14 @@
 
 #include "nlohmann/json.hpp"
 #include "adios2.h"
-// #include "csv.hpp"
 
 #include "mpi.h"
 
-#include "constants.cpp"
-#include "utils.cpp"
-#include "simple.cpp"
-#include "barriers.cpp"
-#include "logic.cpp"
+#include "constants.hpp"
+#include "utils.hpp"
+#include "simple.hpp"
+#include "barriers.hpp"
+#include "logic.hpp"
 #include "MDN.hpp"
 
 #include <fstream>
@@ -259,11 +258,11 @@ namespace mdn {
             throw std::runtime_error("Root sanity doesn't passed");
         }
 
-        // logger.info(std::string("Random int: " + std::to_string(rnd)));
-        // logger.info(std::string("Received arrray:"));
+        logger.info(std::string("Random int: " + std::to_string(rnd)));
+        logger.info(std::string("Received arrray:"));
         for (int i = 0; i < size; ++i)
         {
-            // logger.info(std::to_string(responces[i]));
+            logger.info(std::to_string(responces[i]));
             if (responces[i] - i != rnd)
             {
                 std::cerr << "Root sanity doesn't passed" << std::endl;
@@ -322,13 +321,7 @@ namespace mdn {
         uint64_t timestep{}, _Natoms{};
         double Volume{}, total_temp{};
         std::cout << std::endl;
-        // std::vector<uint64_t> sizes_counts(Natoms + 1, 0UL);
-        // std::vector<double> temps_by_size(Natoms + 1, 0.0);
 
-        // std::ofstream matrix_csv_file(args.outfile.parent_path() / files::matrix_csv, std::ios_base::out);
-        // std::ofstream temps_csv_file(args.outfile.parent_path() / files::temps_csv, std::ios_base::out);
-        // auto matrix_writer = csv::make_csv_writer(matrix_csv_file);
-        // auto temps_writer = csv::make_csv_writer(temps_csv_file);
         csvWriter matrix_writer(args.outfile.parent_path() / files::matrix_csv);
         csvWriter temps_writer(args.outfile.parent_path() / files::temps_csv);
 

@@ -13,9 +13,9 @@
 
 #include "mpi.h"
 
-#include "constants.cpp"
-#include "utils.cpp"
-#include "barriers.cpp"
+#include "constants.hpp"
+#include "utils.hpp"
+#include "barriers.hpp"
 
 #include <fstream>
 

@@ -10,11 +10,10 @@
 #include "mpi.h"
 
 // This project libraries
-#include "utils.cpp"
 #include "MDN.hpp"
 #include "utils.hpp"
-#include "root.cpp"
-#include "nonroot.cpp"
+#include "root.hpp"
+#include "nonroot.hpp"
 
 namespace mdn{
 

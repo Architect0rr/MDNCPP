@@ -2,7 +2,6 @@ cmake_minimum_required(VERSION 3.18.0)
 project(MDNCPP VERSION 0.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
-set(CSV_CXX_STANDARD   20)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 
 include(CTest)
