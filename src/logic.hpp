@@ -20,12 +20,11 @@
     #include "zip.hpp"
 #endif // !__cpp_lib_ranges_zip
 
-#ifdef __MDN_BUILD_DEBUG_CODE__
-    #define __MDN_PROFILING__
-#endif // !__MDN_BUILD_DEBUG_CODE__
 
-#define __CALC_ENTHROPY__
-#define __KE_PE_PRESENT__
+// #define __MDN_PROFILING__
+// #define __CALC_ENTHROPY__
+// #define __KE_PE_PRESENT__
+
 #ifdef __CALC_ENTHROPY__
     #ifndef __KE_PE_PRESENT__
         #define __CALC_PE__
@@ -194,12 +193,19 @@ namespace mdn{
         // id c_clusters mass vx vy vz [x y z [ke pe]]
 
         #ifdef __MDN_PROFILING__
-            timer global_timer;
-            timer per_storage_timer;
-            timer per_step_timer;
+            timer Tglobal;
+            timer TPstorage;
+            timer TPstep;
 
-            global_timer.start();
-            per_storage_timer.start();
+            timer TADIOS_get_data;
+            timer TADIOS_write_data;
+
+            timer Tcalc_PE;
+            timer Tcalc_enthropy;
+            timer Tcleaning;
+
+            Tglobal.start();
+            TPstorage.start();
         #endif // !__MDN_PROFILING__
 
         for (const auto &[storage, steps] : storages){
@@ -220,7 +226,7 @@ namespace mdn{
                 }
 
                 #ifdef __MDN_PROFILING__
-                    per_step_timer.start();
+                    TPstep.start();
                 #endif // !__MDN_PROFILING__
 
                 while (currentStep != steps.first + steps.second)
@@ -246,6 +252,9 @@ namespace mdn{
                         continue;
                     }
 
+                    #ifdef __MDN_PROFILING__
+                        TADIOS_get_data.b();
+                    #endif // !__MDN_PROFILING__
                     reader.Get(varNstep, timestep);
                     reader.Get(varNatoms, Natoms);
                     reader.Get(varBoxxhi, boxxhi);
@@ -257,6 +266,9 @@ namespace mdn{
                     reader.Get(varAtoms, Atoms_buf.get());
                     reader.PerformGets();
                     reader.EndStep();
+                    #ifdef __MDN_PROFILING__
+                        TADIOS_get_data.e();
+                    #endif // !__MDN_PROFILING__
 
                     Volume = abs((boxxhi - boxxlo) * (boxyhi - boxylo) * (boxzhi - boxzlo));
 
@@ -282,6 +294,9 @@ namespace mdn{
                     }
 
                     #ifdef __CALC_PE__
+                        #ifdef __MDN_PROFILING__
+                            Tcalc_PE.b();
+                        #endif // !__MDN_PROFILING__
                         for (size_t i = 0; i < Natoms; ++i)
                             for (size_t j = i; j < Natoms; ++j)
                             {
@@ -292,6 +307,9 @@ namespace mdn{
                                     pes[j] += en;
                                 }
                             }
+                        #ifdef __MDN_PROFILING__
+                            Tcalc_PE.e();
+                        #endif // !__MDN_PROFILING__
                     #endif // __CALC_PE__
 
                     total_temp = 0;
@@ -336,6 +354,9 @@ namespace mdn{
                     }
 
                     #ifdef __CALC_ENTHROPY__
+                        #ifdef __MDN_PROFILING__
+                            Tcalc_enthropy.b();
+                        #endif // !__MDN_PROFILING__
                         for (const auto&[size, cl_ids] : cluster_ids_by_size){
                             for (const uint64_t& cl_id: cl_ids){
 
@@ -451,8 +472,14 @@ namespace mdn{
                             // f_energy[size] = kes_by_size[size] + pes_by_size[size] - enth_by_size[size]*temps_by_size[size];
                             // kes_by_size[size] + pes_by_size[size] - enth_by_size[size]*temps_by_size[size];
                         }
+                        #ifdef __MDN_PROFILING__
+                            Tcalc_enthropy.e();
+                        #endif // !__MDN_PROFILING__
                     #endif // __CALC_ENTHROPY__
 
+                    #ifdef __MDN_PROFILING__
+                        TADIOS_write_data.b();
+                    #endif // !__MDN_PROFILING__
                     writer.BeginStep();
                     writer.Put(WvarNstep, timestep);
                     writer.Put(WvarDist,   sizes_counts.data());
@@ -467,7 +494,13 @@ namespace mdn{
                     writer.PerformPuts();
                     // writer.PerformDataWrite();
                     writer.EndStep();
+                    #ifdef __MDN_PROFILING__
+                        TADIOS_write_data.e();
+                    #endif // !__MDN_PROFILING__
 
+                    #ifdef __MDN_PROFILING__
+                        Tcleaning.b();
+                    #endif // !__MDN_PROFILING__
                     unique_cluster_ids.clear();
                     particles_by_cluster_id.clear();
                     cluster_ids_by_size.clear();
@@ -487,12 +520,15 @@ namespace mdn{
                         //     std::fill(f_energy.begin(), f_energy.end(), 0.0);
                         #endif // !__KE_PE_PRESENT__
                     #endif // __CALC_ENTHROPY__
+                    #ifdef __MDN_PROFILING__
+                        Tcleaning.e();
+                    #endif // !__MDN_PROFILING__
 
                     #ifdef __MDN_PROFILING__
-                        per_step_timer.cutoff();
-                        if (global_timer.count() > 1000*60)
-                            logger.info("Profiling: {} ms per step, {} ms per storage", per_step_timer.current(), per_storage_timer.current());
-                        logger.info("Profiling: {} ms per step, {} ms per storage based on {} steps", per_step_timer.current(), per_storage_timer.current(), per_step_timer.counter);
+                        TPstep.cutoff();
+                        if (Tglobal.count() > 1000*60)
+                            logger.info("Profiling: {} ms per step, {} ms per storage", TPstep.current(), TPstorage.current());
+                        logger.info("Profiling: {} ms per step, {} ms per storage based on {} steps", TPstep.current(), TPstorage.current(), TPstep.counter);
                     #endif // !__MDN_PROFILING__
                     logger.flush();
                 }
@@ -512,7 +548,7 @@ namespace mdn{
                 throw;
             }
             #ifdef __MDN_PROFILING__
-                per_storage_timer.cutoff();
+                TPstorage.cutoff();
             #endif // !__MDN_PROFILING__
 
             logger.info("End storage: {}", storage.string());
@@ -522,12 +558,12 @@ namespace mdn{
         logger.debug("Closed writer");
 
         #ifdef __MDN_PROFILING__
-            per_step_timer.check();
-            per_storage_timer.check();
-            global_timer.check();
-            global_timer.cutoff();
-            logger.info("Final profiling results: {} ms per step, {} ms per storage", per_step_timer.current(), per_storage_timer.current());
-            logger.info("Profiling: {} ms total wall time", global_timer.current());
+            TPstep.check();
+            TPstorage.check();
+            Tglobal.check();
+            Tglobal.cutoff();
+            logger.info("Final profiling results: {} ms per step, {} ms per storage", TPstep.current(), TPstorage.current());
+            logger.info("Profiling: {} ms total wall time", Tglobal.current());
         #endif // !__MDN_PROFILING__
 
         logger.info("End of processing");

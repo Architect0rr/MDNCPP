@@ -6,9 +6,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED YES)
 
 include(CTest)
 enable_testing()
-include(ExternalProject)
+# include(ExternalProject)
 
-add_definitions(-DMDNCPP_VERSION="0.1.1")
+add_definitions(-DMDNCPP_VERSION="0.1.2")
 
 if(NOT DEFINED CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
@@ -16,23 +16,59 @@ endif()
 
 if(CMAKE_BUILD_TYPE STREQUAL Debug)
     message("Defining debug")
-    add_definitions(-DMDNCPP_BUILD_DEBUG)
+    add_definitions(-DMDNCPP_CONF_BUILD_DEBUG)
 endif()
 
-if(DEFINED MDNCPP_PROFILING)
-    if(MDNCPP_PROFILING STREQUAL ON)
-        message("Profiling on")
-        add_definitions(-DMDNCPP_ENABLE_PROFILING)
+if(DEFINED MDNCPP_ENABLE_PROFILING)
+    if(MDNCPP_ENABLE_PROFILING STREQUAL ON)
+        message("Profiling: on")
+        add_definitions(-DMDNCPP_CONF_ENABLE_PROFILING)
+    else()
+        message("Profiling: off")
     endif()
+else()
+    message("Profiling: off")
+endif()
+
+if(DEFINED MDNCPP_CALC_ENTHROPY)
+    if(MDNCPP_CALC_ENTHROPY STREQUAL ON)
+        message("Enthropy calculation: on")
+        add_definitions(-DMDNCPP_CONF_CALC_ENTHROPY)
+    else()
+        message("Enthropy calculation: off")
+    endif()
+else()
+    message("Enthropy calculation: off")
+endif()
+
+if(DEFINED MDNCPP_KE_PE_PRESENT)
+    if(MDNCPP_KE_PE_PRESENT STREQUAL ON)
+        message("Ke, pe pesent: yes")
+        add_definitions(-DMDNCPP_CONF_KE_PE_PRESENT)
+    else()
+        message("Ke, pe pesent: no")
+    endif()
+else()
+    message("Ke, pe pesent: no")
 endif()
 
 set(CMAKE_STAGING_PREFIX ${PROJECT_SOURCE_DIR}/build/stage)
 set(CMAKE_CXX_FLAGS_Release "-O3")
-set(CMAKE_CXX_FLAGS_Debug "-Wall")
+set(CMAKE_CXX_FLAGS_Debug "-O3 -Wall")
 
 find_package(MPI REQUIRED)
 find_package(OpenMP REQUIRED)
 find_package(ADIOS2 REQUIRED)
+find_package(spdlog REQUIRED)
+find_package(nlohmann_json REQUIRED)
+find_package(fmt)
+
+include(FetchContent)
+FetchContent_Declare(
+    argparse
+    GIT_REPOSITORY https://github.com/p-ranav/argparse.git
+)
+FetchContent_MakeAvailable(argparse)
 
 if(NOT TARGET MPI::MPI_CXX)
     add_library(MPI::MPI_CXX IMPORTED INTERFACE)
@@ -57,17 +93,6 @@ if(NOT TARGET OpenMP::OpenMP_CXX)
 endif()
 
 
-find_package(spdlog REQUIRED)
-find_package(nlohmann_json REQUIRED)
-find_package(fmt)
-
-include(FetchContent)
-FetchContent_Declare(
-    argparse
-    GIT_REPOSITORY https://github.com/p-ranav/argparse.git
-)
-FetchContent_MakeAvailable(argparse)
-
 add_library(yas INTERFACE)
 target_include_directories(yas INTERFACE ${PROJECT_SOURCE_DIR}/lib/yas/include)
 
@@ -75,8 +100,8 @@ configure_file(${PROJECT_SOURCE_DIR}/src/config.hpp.in ${PROJECT_SOURCE_DIR}/src
 
 add_executable(${PROJECT_NAME} ${PROJECT_SOURCE_DIR}/src/MDNCPP.cpp)
 
-target_link_libraries(${PROJECT_NAME} PUBLIC  MPI::MPI_CXX)
-target_link_libraries(${PROJECT_NAME} PUBLIC  OpenMP::OpenMP_CXX)
+target_link_libraries(${PROJECT_NAME} PRIVATE MPI::MPI_CXX)
+target_link_libraries(${PROJECT_NAME} PRIVATE OpenMP::OpenMP_CXX)
 target_link_libraries(${PROJECT_NAME} PRIVATE adios2::cxx11_mpi MPI::MPI_C)
 target_link_libraries(${PROJECT_NAME} PRIVATE spdlog)
 target_link_libraries(${PROJECT_NAME} PRIVATE argparse)
