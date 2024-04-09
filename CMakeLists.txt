@@ -6,7 +6,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED YES)
 
 include(CTest)
 enable_testing()
-# include(ExternalProject)
 
 add_definitions(-DMDNCPP_VERSION="0.1.2")
 
@@ -61,7 +60,13 @@ find_package(OpenMP REQUIRED)
 find_package(ADIOS2 REQUIRED)
 find_package(spdlog REQUIRED)
 find_package(nlohmann_json REQUIRED)
-find_package(fmt)
+find_package(fmt REQUIRED)
+
+if(spdlog_FOUND)
+    message("spdlog found")
+else()
+    message("spdlog NOT found")
+endif()
 
 include(FetchContent)
 FetchContent_Declare(
@@ -103,7 +108,7 @@ add_executable(${PROJECT_NAME} ${PROJECT_SOURCE_DIR}/src/MDNCPP.cpp)
 target_link_libraries(${PROJECT_NAME} PRIVATE MPI::MPI_CXX)
 target_link_libraries(${PROJECT_NAME} PRIVATE OpenMP::OpenMP_CXX)
 target_link_libraries(${PROJECT_NAME} PRIVATE adios2::cxx11_mpi MPI::MPI_C)
-target_link_libraries(${PROJECT_NAME} PRIVATE spdlog)
+target_link_libraries(${PROJECT_NAME} PRIVATE spdlog::spdlog)
 target_link_libraries(${PROJECT_NAME} PRIVATE argparse)
 target_link_libraries(${PROJECT_NAME} PRIVATE fmt::fmt)
 target_link_libraries(${PROJECT_NAME} PRIVATE nlohmann_json::nlohmann_json)
