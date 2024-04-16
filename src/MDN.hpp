@@ -112,8 +112,6 @@ namespace mdn{
 
         // utility functions
         json parse_json(const fs::path&, const std::string&);
-        RETURN_CODES create_d_if_not(const fs::path&, const std::string&);
-        RETURN_CODES check_existense(const fs::path&, const std::string&);
     };
 
     class MDN_root : public MDN{

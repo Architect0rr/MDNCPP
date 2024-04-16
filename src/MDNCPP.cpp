@@ -13,8 +13,7 @@
 #include "MDN.hpp"
 #include "utils.hpp"
 #include "setup.hpp"
-// #include "root.hpp"
-// #include "nonroot.hpp"
+#include "logic.hpp"
 
 namespace mdn{
 

@@ -53,27 +53,6 @@ namespace mdn{
         }
     }
 
-    RETURN_CODES MDN::create_d_if_not(const fs::path& folder, const std::string& prefix = ""){
-        // uint64_t token = std::chrono::system_clock::now().time_since_epoch().count();
-        std::error_code ec;
-        if (!fs::exists(folder, ec)){
-            if (!ec){
-                logger.info("{} directory '{}' does not exists, creating", prefix, folder.string());
-                if (!fs::create_directories(folder, ec)){
-                    logger.warn("Can not create {} directory '{}' due to error with code: {}. Message:", prefix, folder.string(), ec.value());
-                    logger.warn(ec.message());
-                    return RETURN_CODES::ERROR;
-                }else{
-                    return RETURN_CODES::OK;
-                }
-            }else{
-                logger.warn("Can not check {} directory '{}' existense due to error with code: {}. Message:", prefix, folder.string(), ec.value());
-                logger.warn(ec.message());
-                return RETURN_CODES::ERROR;
-            }
-        } else return RETURN_CODES::OK;
-    }
-
     void MDN::setup_logger(const int rank)
     {
         fs::path log_folder = cwd / folders::log;
@@ -312,30 +291,6 @@ namespace mdn{
         }
         long double count(){
             return std::chrono::duration<long double, std::milli>(t2 - t1).count();
-        }
-    };
-
-    struct csvWriter{
-        std::ofstream str;
-        csvWriter(const fs::path& file){str.open(file, std::ios_base::out);}
-        ~csvWriter() {str.close();}
-
-        template<typename T>
-        csvWriter& operator<<(const std::span<T>& arr){
-        for (size_t i = 0; i < arr.size() - 1; ++i)
-            str << arr[i] << ',';
-            str << arr[arr.size() - 1];
-            return *this;
-        }
-
-        template<typename T>
-        csvWriter& operator<<(const T& el){
-            str << el << ',';
-            return *this;
-        }
-
-        void flush(){
-            str.flush();
         }
     };
 

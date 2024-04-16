@@ -2,19 +2,12 @@
 #define __MDN_SETUP__
 
 #include "nlohmann/json.hpp"
-#include "adios2.h"
 
 #include "mpi.h"
 
-#include "constants.hpp"
 #include "utils.hpp"
 #include "barriers.hpp"
-#include "logic.hpp"
 #include "MDN.hpp"
-
-// #include <fstream>
-// #include <memory>
-// #include <functional>
 
 namespace mdn {
 
