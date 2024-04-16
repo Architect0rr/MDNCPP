@@ -19,4 +19,8 @@
     #define __KE_PE_PRESENT__
 #endif // MDNCPP_CONF_KE_PE_PRESENT
 
+#ifdef MDNCPP_CONF_TRACE_OUT
+    #define __MDN_TRACE_OUT__
+#endif // MDNCPP_CONF_TRACE_OUT
+
 #endif // !__MDN_CONFIG_HPP__

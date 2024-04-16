@@ -11,6 +11,7 @@ namespace mdn{
     }
     namespace files
     {
+        constexpr const std::string_view distribution("dist.json");
         constexpr const std::string_view data("data.json");
         constexpr const std::string_view output_datafile_basename("data.bp");
         constexpr const std::string_view distribution_cache("distribution.cache");
@@ -27,6 +28,8 @@ namespace mdn{
     namespace fields
     {
         constexpr const std::string_view storages("storages");
+        constexpr const std::string_view outfiles("outputfiles");
+        constexpr const std::string_view maxclsize("maxclsize");
         constexpr const std::string_view Natoms("N_atoms");
         constexpr const std::string_view Volume("Volume");
         constexpr const std::string_view Dims("dimensions");

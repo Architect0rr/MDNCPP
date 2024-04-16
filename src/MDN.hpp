@@ -53,6 +53,7 @@
 
 #endif // !__MDN_TRY_CATCH_MACRO__
 
+
 #include <filesystem>
 #include <map>
 
@@ -77,6 +78,7 @@ namespace mdn{
         int mode = 0;
         bool verbose = false;
         fs::path outfile = "/";
+        fs::path distribution = "/";
         bool cache = false;
     };
 
@@ -104,14 +106,14 @@ namespace mdn{
         RETURN_CODES run(const fs::path &, const std::map<fs::path, std::pair<int, int>> &, const uint64_t, uint64_t&);
 
         // funcitons different for (non) root workers
-        virtual RETURN_CODES entry() = 0;
-        virtual RETURN_CODES sanity() = 0;
-        virtual RETURN_CODES setup() = 0;
-        virtual uint64_t dns(std::map<fs::path, std::pair<int, int>> &) = 0;
+        virtual RETURN_CODES sanity();
+        virtual RETURN_CODES setup();
+        virtual RETURN_CODES entry();
 
         // utility functions
+        json parse_json(const fs::path&, const std::string&);
         RETURN_CODES create_d_if_not(const fs::path&, const std::string&);
-        RETURN_CODES check_existense(const fs::path& folder, const std::string&);
+        RETURN_CODES check_existense(const fs::path&, const std::string&);
     };
 
     class MDN_root : public MDN{
@@ -119,33 +121,11 @@ namespace mdn{
         using MDN::MDN;
 
     private:
-        RETURN_CODES entry() override;
         RETURN_CODES sanity() override;
-        RETURN_CODES setup() override;
-        uint64_t dns(std::map<fs::path, std::pair<int, int>> &) override;
-
-        const uint64_t bearbeit(const fs::path &, double *);
-        const std::map<fs::path, int> storage_rsolve(const json &);
-        const int get_total_steps(adios2::IO &, const fs::path &);
-        RETURN_CODES distribute(const std::map<fs::path, int> &, std::map<fs::path, std::pair<int, int>> &);
-        std::map<int, std::map<fs::path, std::pair<int, int>>> make_distribution(const std::map<fs::path, int> &);
-        const bool save_distribution(const std::map<int, std::map<std::string, std::pair<int, int>>>&);
-        const bool load_distribution(std::map<int, std::map<std::string, std::pair<int, int>>>&);
-        const bool save_storages(const std::map<fs::path, int>&, const unsigned long);
-        const bool load_storages(std::map<fs::path, int>&, const unsigned long);
-        void gather_storages(std::map<int, std::string>&);
-        void gen_matrix(std::map<int, std::string>&, const uint64_t, const u_int64_t);
-    };
-
-    class MDN_nonroot : public MDN{
-    public:
-        using MDN::MDN;
-
-    private:
         RETURN_CODES entry() override;
-        RETURN_CODES sanity() override;
         RETURN_CODES setup() override;
-        uint64_t dns(std::map<fs::path, std::pair<int, int>> &) override;
+
+        std::map<int, std::string> gather_storages();
     };
 
 } // namespace mdn

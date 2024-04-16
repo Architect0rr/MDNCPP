@@ -20,11 +20,6 @@
     #include "zip.hpp"
 #endif // !__cpp_lib_ranges_zip
 
-
-// #define __MDN_PROFILING__
-// #define __CALC_ENTHROPY__
-// #define __KE_PE_PRESENT__
-
 #ifdef __CALC_ENTHROPY__
     #ifndef __KE_PE_PRESENT__
         #define __CALC_PE__
@@ -61,13 +56,43 @@ namespace mdn{
 
     namespace fs = std::filesystem;
     RETURN_CODES MDN::run(const fs::path &ws, const std::map<fs::path, std::pair<int, int>> &storages, const uint64_t _Natoms, uint64_t& max_cluster_size){
-        adios2::ADIOS adios = adios2::ADIOS("adios2_BP4_config.xml", MPI_COMM_SELF);
+        #ifdef __MDN_PROFILING__
+            logger.debug("Profiling enabled");
+        #else
+            logger.debug("Profiling disabled");
+        #endif // __MDN_PROFILING__
+        #ifdef __CALC_ENTHROPY__
+            logger.debug("Enthropy caltulation:  on");
+        #else
+            logger.debug("Enthropy caltulation:  off");
+        #endif // __CALC_ENTHROPY__
+        #ifdef __KE_PE_PRESENT__
+            logger.debug("KE and PE are present: yes");
+        #else
+            logger.debug("KE and PE are present: no");
+        #endif // __KE_PE_PRESENT__
+        #ifdef __CALC_PE__
+            logger.debug("PE caltulation:        on");
+        #else
+            logger.debug("PE caltulation:        off");
+        #endif // __CALC_PE__
+        #ifdef __MDN_TRACE_OUT__
+            logger.debug("Trace out:             on");
+        #else
+            logger.debug("Trace out:             off");
+        #endif // __MDN_TRACE_OUT__
+
+        // adios2::ADIOS adios = adios2::ADIOS("adios2_BP4_config.xml", MPI_COMM_SELF);
+        adios2::ADIOS adios = adios2::ADIOS(MPI_COMM_SELF);
+        logger.debug("ADIOS2 initialized");
         adios2::IO dataio   = adios.DeclareIO("DataWriter");
         adios2::IO lmpsio   = adios.DeclareIO("LAMMPSReader");
-        // dataio.SetEngine("BP4");
-        // lmpsio.SetEngine("BP4");
+        dataio.SetEngine("BP4");
+        lmpsio.SetEngine("BP4");
+        logger.debug("ADIOS2 IO initialized");
 
         adios2::Engine writer = dataio.Open(ws, adios2::Mode::Write, MPI_COMM_SELF);
+        logger.debug("ADIOS2 IO DataWriter initialized");
 
         adios2::Variable<uint64_t> WvarNstep  = dataio.DefineVariable<uint64_t>("ntimestep");
         adios2::Variable<uint64_t> WvarN      = dataio.DefineVariable<uint64_t>("Natoms");
@@ -98,7 +123,7 @@ namespace mdn{
                 constexpr int nprops = 9;
             #endif // __KE_PE_PRESENT__
         #else
-            constexpr int nprops = 6;
+            constexpr int nprops = 9;
         #endif // __CALC_ENTHROPY__
         constexpr double rcut = 2.5;
 
@@ -145,7 +170,7 @@ namespace mdn{
             #ifdef __CALC_PE__
                 std::vector<double> pes(_Natoms, 0.0);
                 double dist{}, en{};
-            #endif // !__CALC_PE__
+            #endif // __CALC_PE__
         #endif // !__KE_PE_PRESENT__
 
         // std::map<uint64_t, double> temps_by_size;
@@ -191,7 +216,10 @@ namespace mdn{
         #endif // __CALC_ENTHROPY__
 
         // id c_clusters mass vx vy vz [x y z [ke pe]]
+        logger.debug("Variables and buffers initialized");
 
+        timer Tmisc;
+        Tmisc.b();
         #ifdef __MDN_PROFILING__
             timer Tglobal;
             timer TPstorage;
@@ -206,12 +234,18 @@ namespace mdn{
 
             Tglobal.start();
             TPstorage.start();
-        #endif // !__MDN_PROFILING__
+        #endif // __MDN_PROFILING__
 
+        logger.debug("Starting main loop");
+        uint64_t total_steps = 0;
+        uint64_t done_steps = 0;
+        for (const auto &[storage, steps] : storages) total_steps += steps.second - steps.first;
         for (const auto &[storage, steps] : storages){
             try{
                 adios2::Engine reader = lmpsio.Open(storage, adios2::Mode::Read, MPI_COMM_SELF);
-
+                #ifdef __MDN_TRACE_OUT__
+                    logger.trace("Open storage ({}-{}):{}", steps.first, steps.second, storage.string().c_str());
+                #endif // __MDN_TRACE_OUT__
                 uint64_t currentStep = 0;
                 while (currentStep != steps.first)
                 {
@@ -224,15 +258,22 @@ namespace mdn{
                     currentStep = reader.CurrentStep();
                     reader.EndStep();
                 }
+                #ifdef __MDN_TRACE_OUT__
+                    logger.trace("Skipped {} steps", currentStep);
+                #endif // __MDN_TRACE_OUT__
 
                 #ifdef __MDN_PROFILING__
                     TPstep.start();
-                #endif // !__MDN_PROFILING__
+                #endif // __MDN_PROFILING__
 
                 while (currentStep != steps.first + steps.second)
                 {
-                    if (reader.BeginStep() == adios2::StepStatus::EndOfStream)
+                    if (reader.BeginStep() == adios2::StepStatus::EndOfStream){
+                        #ifdef __MDN_TRACE_OUT__
+                            logger.trace("EOS reached");
+                        #endif // __MDN_TRACE_OUT__
                         break;
+                    }
 
                     currentStep = reader.CurrentStep();
 
@@ -248,13 +289,23 @@ namespace mdn{
 
                     if (!(varNstep && varNatoms && varBoxxhi && varBoxyhi && varBoxzhi && varBoxxlo && varBoxylo && varBoxzlo && varAtoms)){
                         reader.EndStep();
-                        logger.error("Error on read variables at step {}", currentStep);
+                        logger.error("Error on read variables at step {}, continuing to next step", currentStep);
                         continue;
                     }
+                    #ifdef __MDN_TRACE_OUT__
+                        adios2::Dims vAtomsShape = varAtoms.Shape();
+                        logger.trace("_Natoms: {}", _Natoms);
+                        std::string au = "varAtoms::Shape: ";
+                        for (const auto& elem : vAtomsShape){
+                            au += std::to_string(elem) + ", ";
+                        }
+                        logger.trace(au);
+                        logger.trace("Inquired variables");
+                    #endif // __MDN_TRACE_OUT__
 
                     #ifdef __MDN_PROFILING__
                         TADIOS_get_data.b();
-                    #endif // !__MDN_PROFILING__
+                    #endif // __MDN_PROFILING__
                     reader.Get(varNstep, timestep);
                     reader.Get(varNatoms, Natoms);
                     reader.Get(varBoxxhi, boxxhi);
@@ -268,7 +319,10 @@ namespace mdn{
                     reader.EndStep();
                     #ifdef __MDN_PROFILING__
                         TADIOS_get_data.e();
-                    #endif // !__MDN_PROFILING__
+                    #endif // __MDN_PROFILING__
+                    #ifdef __MDN_TRACE_OUT__
+                        logger.trace("Got data");
+                    #endif // __MDN_TRACE_OUT__
 
                     Volume = abs((boxxhi - boxxlo) * (boxyhi - boxylo) * (boxzhi - boxzlo));
 
@@ -522,14 +576,36 @@ namespace mdn{
                     #endif // __CALC_ENTHROPY__
                     #ifdef __MDN_PROFILING__
                         Tcleaning.e();
-                    #endif // !__MDN_PROFILING__
+                    #endif // __MDN_PROFILING__
 
                     #ifdef __MDN_PROFILING__
-                        TPstep.cutoff();
-                        if (Tglobal.count() > 1000*60)
-                            logger.info("Profiling: {} ms per step, {} ms per storage", TPstep.current(), TPstorage.current());
-                        logger.info("Profiling: {} ms per step, {} ms per storage based on {} steps", TPstep.current(), TPstorage.current(), TPstep.counter);
-                    #endif // !__MDN_PROFILING__
+                    TPstep.cutoff();
+                    #endif // __MDN_PROFILING__
+                    ++done_steps;
+                    Tmisc.check();
+                    if (Tmisc.count() > 60*1000){
+                        Tmisc.b();
+                        logger.debug("Progress:     {}%", static_cast<long double>(done_steps) / total_steps);
+                        #ifdef __MDN_PROFILING__
+                            logger.info("###################");
+                            logger.info("Profiling:");
+                            logger.info("Per storage: {} ms", TPstorage.current());
+                            logger.info("Per step:    {} ms", TPstep.current());
+                            logger.info("|---Input:       {} ms", TADIOS_get_data.sum());
+                            logger.info("|---Output:      {} ms", TADIOS_write_data.sum());
+                            logger.info("|---Calc PE:     {} ms", Tcalc_PE.sum());
+                            logger.info("|---Calc ENTH:   {} ms", Tcalc_enthropy.sum());
+                            logger.info("|---Cleaning:    {} ms", Tcleaning.sum());
+
+                            double auxtime = TPstep.current() - TADIOS_get_data.sum() - TADIOS_write_data.sum();
+                            if (!std::isnan(Tcalc_PE.sum()))       auxtime -= Tcalc_PE.sum();
+                            if (!std::isnan(Tcalc_enthropy.sum())) auxtime -= Tcalc_enthropy.sum();
+                            if (!std::isnan(Tcleaning.sum()))      auxtime -= Tcleaning.sum();
+
+                            logger.info("|---Not stated   {} ms", auxtime);
+                            logger.info("###################");
+                        #endif // !__MDN_PROFILING__
+                        }
                     logger.flush();
                 }
 
