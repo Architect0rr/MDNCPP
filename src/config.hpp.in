@@ -23,4 +23,10 @@
     #define __MDN_TRACE_OUT__
 #endif // MDNCPP_CONF_TRACE_OUT
 
+#ifdef __CALC_ENTHROPY__
+    #ifndef __KE_PE_PRESENT__
+        #define __CALC_PE__
+    #endif // !__KE_PE_PRESENT__
+#endif // __CALC_ENTHROPY__
+
 #endif // !__MDN_CONFIG_HPP__

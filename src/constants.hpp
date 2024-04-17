@@ -27,6 +27,7 @@ namespace mdn{
     }
     namespace fields
     {
+        constexpr const std::string_view Dhash("Dhash");
         constexpr const std::string_view storages("storages");
         constexpr const std::string_view outfiles("outputfiles");
         constexpr const std::string_view maxclsize("maxclsize");

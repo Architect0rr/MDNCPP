@@ -109,8 +109,8 @@ if(NOT TARGET OpenMP::OpenMP_CXX)
 endif()
 
 
-add_library(yas INTERFACE)
-target_include_directories(yas INTERFACE ${PROJECT_SOURCE_DIR}/lib/yas/include)
+# add_library(yas INTERFACE)
+# target_include_directories(yas INTERFACE ${PROJECT_SOURCE_DIR}/lib/yas/include)
 
 configure_file(${PROJECT_SOURCE_DIR}/src/config.hpp.in ${PROJECT_SOURCE_DIR}/src/config.hpp @ONLY)
 
@@ -123,7 +123,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE spdlog::spdlog)
 target_link_libraries(${PROJECT_NAME} PRIVATE argparse)
 target_link_libraries(${PROJECT_NAME} PRIVATE fmt::fmt)
 target_link_libraries(${PROJECT_NAME} PRIVATE nlohmann_json::nlohmann_json)
-target_link_libraries(${PROJECT_NAME} PRIVATE yas)
+# target_link_libraries(${PROJECT_NAME} PRIVATE yas)
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})

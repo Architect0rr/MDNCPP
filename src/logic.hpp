@@ -20,12 +20,6 @@
     #include "zip.hpp"
 #endif // !__cpp_lib_ranges_zip
 
-#ifdef __CALC_ENTHROPY__
-    #ifndef __KE_PE_PRESENT__
-        #define __CALC_PE__
-    #endif // !__KE_PE_PRESENT__
-#endif // __CALC_ENTHROPY__
-
 
 namespace mdn{
 
@@ -55,43 +49,40 @@ namespace mdn{
     }
 
     namespace fs = std::filesystem;
-    RETURN_CODES MDN::run(const fs::path &ws, const std::map<fs::path, std::pair<int, int>> &storages, const uint64_t _Natoms, uint64_t& max_cluster_size){
-        #ifdef __MDN_PROFILING__
-            logger.debug("Profiling enabled");
-        #else
-            logger.debug("Profiling disabled");
-        #endif // __MDN_PROFILING__
-        #ifdef __CALC_ENTHROPY__
-            logger.debug("Enthropy caltulation:  on");
-        #else
-            logger.debug("Enthropy caltulation:  off");
-        #endif // __CALC_ENTHROPY__
-        #ifdef __KE_PE_PRESENT__
-            logger.debug("KE and PE are present: yes");
-        #else
-            logger.debug("KE and PE are present: no");
-        #endif // __KE_PE_PRESENT__
-        #ifdef __CALC_PE__
-            logger.debug("PE caltulation:        on");
-        #else
-            logger.debug("PE caltulation:        off");
-        #endif // __CALC_PE__
-        #ifdef __MDN_TRACE_OUT__
-            logger.debug("Trace out:             on");
-        #else
-            logger.debug("Trace out:             off");
-        #endif // __MDN_TRACE_OUT__
+    void MDN::run(){
+        // MPI_Offset off = rank*sizeof(int)*2;
 
-        // adios2::ADIOS adios = adios2::ADIOS("adios2_BP4_config.xml", MPI_COMM_SELF);
-        adios2::ADIOS adios = adios2::ADIOS(MPI_COMM_SELF);
+        // // MPI_File_set_view(&fh, off, MPI_INT, , MPI_INFO_NULL);
+        // MPI_File_write_at_all(fh, off, &rank, 1, MPI_INT, &status);
+        // int data;
+        // MPI_File_read_at_all(fh, off, &data, 1, MPI_INT, &status);
+        // if (data == rank)
+        //     std::cout << "OK" << std::endl;
+
+        int storages_to_skip = -1;
+        uint64_t steps_to_skip = -1;
+        MPI_File_open(wcomm, wfile.string().c_str(), amode, MPI_INFO_NULL, &fh);
+        if (cont){
+            MPI_File_read_at(fh, off, &storages_to_skip, 1, MPI_INT, &status);
+            MPI_File_read_at(fh, off+sizeof(int), &steps_to_skip, 1, MPI_UINT64_T, &status);
+        }
+        // MPI_File_iwrite_at(fh, off, &rank, 1, MPI_INT, &req);
+
+        adios2::ADIOS adios;
+        if (args.adios_conf.string().length() > 0)
+        adios = adios2::ADIOS(args.adios_conf, MPI_COMM_SELF);
+        else adios = adios2::ADIOS(MPI_COMM_SELF);
+
         logger.debug("ADIOS2 initialized");
         adios2::IO dataio   = adios.DeclareIO("DataWriter");
         adios2::IO lmpsio   = adios.DeclareIO("LAMMPSReader");
-        dataio.SetEngine("BP4");
-        lmpsio.SetEngine("BP4");
+        if (args.adios_conf.string().length() > 0){
+            dataio.SetEngine("BP4");
+            lmpsio.SetEngine("BP4");
+        }
         logger.debug("ADIOS2 IO initialized");
 
-        adios2::Engine writer = dataio.Open(ws, adios2::Mode::Write, MPI_COMM_SELF);
+        adios2::Engine writer = dataio.Open(args.outfile, adios2::Mode::Write, MPI_COMM_SELF);
         logger.debug("ADIOS2 IO DataWriter initialized");
 
         adios2::Variable<uint64_t> WvarNstep  = dataio.DefineVariable<uint64_t>("ntimestep");
@@ -236,21 +227,24 @@ namespace mdn{
             TPstorage.start();
         #endif // __MDN_PROFILING__
 
-        logger.debug("Starting main loop");
         uint64_t total_steps = 0;
-        uint64_t done_steps = 0;
         for (const auto &[storage, steps] : storages) total_steps += steps.second - steps.first;
+
+        logger.debug("Starting main loop");
+        uint64_t done_steps = 0;
+        int storage_index = -1;
         for (const auto &[storage, steps] : storages){
+            ++storage_index;
+            if (cont && storage_index < storages_to_skip) continue;
+            if (cont && steps_to_skip >= steps.first + steps.second) continue;
+            uint64_t currentStep = 0;
             try{
                 adios2::Engine reader = lmpsio.Open(storage, adios2::Mode::Read, MPI_COMM_SELF);
                 #ifdef __MDN_TRACE_OUT__
                     logger.trace("Open storage ({}-{}):{}", steps.first, steps.second, storage.string().c_str());
                 #endif // __MDN_TRACE_OUT__
-                uint64_t currentStep = 0;
-                while (currentStep != steps.first)
-                {
-                    if (reader.BeginStep() == adios2::StepStatus::EndOfStream)
-                    {
+                while (currentStep != steps.first) {
+                    if (reader.BeginStep() == adios2::StepStatus::EndOfStream) {
                         logger.error("End of stream happened while scrolling to begin step");
                         logger.error("Storage: {}, begin: {}, end: {}", storage.string(), steps.first, steps.second);
                         throw std::logic_error("End of stream happened while scrolling to begin step");
@@ -258,6 +252,17 @@ namespace mdn{
                     currentStep = reader.CurrentStep();
                     reader.EndStep();
                 }
+                if (cont && steps.first < steps_to_skip)
+                    while (currentStep <= steps_to_skip) {
+                        if (reader.BeginStep() == adios2::StepStatus::EndOfStream) {
+                            logger.error("End of stream happened while scrolling to last processed step");
+                            logger.error("Storage: {}, begin: {}, end: {}", storage.string(), steps.first, steps.second);
+                            throw std::logic_error("End of stream happened while scrolling to last processed step");
+                        }
+                        currentStep = reader.CurrentStep();
+                        reader.EndStep();
+                    }
+
                 #ifdef __MDN_TRACE_OUT__
                     logger.trace("Skipped {} steps", currentStep);
                 #endif // __MDN_TRACE_OUT__
@@ -266,8 +271,10 @@ namespace mdn{
                     TPstep.start();
                 #endif // __MDN_PROFILING__
 
-                while (currentStep != steps.first + steps.second)
-                {
+                MPI_File_write_at(fh, off, &storage_index, 1, MPI_INT, &status);
+                MPI_File_write_at(fh, off + sizeof(int), &currentStep, 1, MPI_UINT64_T, &status);
+
+                while (currentStep != steps.first + steps.second) {
                     if (reader.BeginStep() == adios2::StepStatus::EndOfStream){
                         #ifdef __MDN_TRACE_OUT__
                             logger.trace("EOS reached");
@@ -324,7 +331,7 @@ namespace mdn{
                         logger.trace("Got data");
                     #endif // __MDN_TRACE_OUT__
 
-                    Volume = abs((boxxhi - boxxlo) * (boxyhi - boxylo) * (boxzhi - boxzlo));
+                    Volume = std::abs((boxxhi - boxxlo) * (boxyhi - boxylo) * (boxzhi - boxzlo));
 
                     for (uint64_t j = 0; j < Natoms; ++j) particles_by_cluster_id[cluster_ids[j]].emplace_back(j);
 
@@ -574,35 +581,37 @@ namespace mdn{
                         //     std::fill(f_energy.begin(), f_energy.end(), 0.0);
                         #endif // !__KE_PE_PRESENT__
                     #endif // __CALC_ENTHROPY__
-                    #ifdef __MDN_PROFILING__
-                        Tcleaning.e();
-                    #endif // __MDN_PROFILING__
 
                     #ifdef __MDN_PROFILING__
-                    TPstep.cutoff();
+                        Tcleaning.e();
+                        TPstep.cutoff();
                     #endif // __MDN_PROFILING__
+
                     ++done_steps;
                     Tmisc.check();
                     if (Tmisc.count() > 60*1000){
+                        MPI_File_iwrite_at(fh, off + sizeof(int), &currentStep, 1, MPI_UINT64_T, &req);
                         Tmisc.b();
                         logger.debug("Progress:     {}%", static_cast<long double>(done_steps) / total_steps);
                         #ifdef __MDN_PROFILING__
                             logger.info("###################");
                             logger.info("Profiling:");
-                            logger.info("Per storage: {} ms", TPstorage.current());
-                            logger.info("Per step:    {} ms", TPstep.current());
-                            logger.info("|---Input:       {} ms", TADIOS_get_data.sum());
-                            logger.info("|---Output:      {} ms", TADIOS_write_data.sum());
-                            logger.info("|---Calc PE:     {} ms", Tcalc_PE.sum());
-                            logger.info("|---Calc ENTH:   {} ms", Tcalc_enthropy.sum());
-                            logger.info("|---Cleaning:    {} ms", Tcleaning.sum());
+                            logger.info("├─Per storage: {} ms", TPstorage.current());
+                            logger.info("└─Per step:    {} ms", TPstep.current());
+                            logger.info("  ├─Input:       {} ms", TADIOS_get_data.sum());
+                            logger.info("  ├─Output:      {} ms", TADIOS_write_data.sum());
+                            logger.info("  ├─Calc PE:     {} ms", Tcalc_PE.sum());
+                            logger.info("  ├─Calc ENTH:   {} ms", Tcalc_enthropy.sum());
+                            logger.info("  ├─Cleaning:    {} ms", Tcleaning.sum());
 
-                            double auxtime = TPstep.current() - TADIOS_get_data.sum() - TADIOS_write_data.sum();
-                            if (!std::isnan(Tcalc_PE.sum()))       auxtime -= Tcalc_PE.sum();
-                            if (!std::isnan(Tcalc_enthropy.sum())) auxtime -= Tcalc_enthropy.sum();
-                            if (!std::isnan(Tcleaning.sum()))      auxtime -= Tcleaning.sum();
-
-                            logger.info("|---Not stated   {} ms", auxtime);
+                            double auxtime = TPstep.current() - TADIOS_get_data.sum() - TADIOS_write_data.sum() - Tcleaning.sum();
+                            #ifdef __CALC_PE__
+                                auxtime -= Tcalc_PE.sum();
+                            #endif // __CALC_PE__
+                            #ifdef __CALC_ENTHROPY__
+                                auxtime -= Tcalc_enthropy.sum();
+                            #endif // __CALC_ENTHROPY__
+                            logger.info("  └─Not stated   {} ms", auxtime);
                             logger.info("###################");
                         #endif // !__MDN_PROFILING__
                         }
@@ -627,6 +636,8 @@ namespace mdn{
                 TPstorage.cutoff();
             #endif // !__MDN_PROFILING__
 
+            MPI_File_write_at(fh, off, &storage_index, 1, MPI_INT, &status);
+            MPI_File_write_at(fh, off + sizeof(int), &currentStep, 1, MPI_UINT64_T, &status);
             logger.info("End storage: {}", storage.string());
         }
 
@@ -642,9 +653,10 @@ namespace mdn{
             logger.info("Profiling: {} ms total wall time", Tglobal.current());
         #endif // !__MDN_PROFILING__
 
+        MPI_File_close(&fh);
         logger.info("End of processing");
-        return RETURN_CODES::OK;
     }
+
 } // namespace
 
 #endif // !__MDN_LOGIC__

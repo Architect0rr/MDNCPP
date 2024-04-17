@@ -75,6 +75,7 @@ namespace mdn{
 
         _args.add_argument("-d", "--debug").help("Turn on debug").flag();
         _args.add_argument("-t", "--trace").help("Turn on trace (enables debug)").flag();
+        _args.add_argument("-a", "--adios_conf").help("Path to ADIOS2 xml config file").default_value(std::string_view("./adios2_BP4_config.xml"));
         _args.add_argument("-D", "--distribution").help("Path to distribution file").default_value(std::string_view("./dist.json"));
         _args.add_argument("-m", "--mode").help("Mode to run").scan<'i', int>().default_value(0);
         _args.add_argument("-o", "--output").help("Output file basename").default_value(std::string_view("data.bp"));
@@ -175,10 +176,55 @@ namespace mdn{
             }
             throw std::runtime_error("Cannot resolve specified output file basename due to error");
         }
+        if (!fs::exists(args.distribution, ec)) {
+            if (ec) {
+                if (rank == cs::mpi_root) {
+                    std::cerr << "  ├─Can not check distribution file '" << args.outfile.string() << "' existense. Error code: " << ec.value() << std::endl;
+                    std::cerr << "  └─Message: " << ec.message() << std::endl;
+                }
+                throw std::runtime_error("Can not check distribution file existense.");
+            } else {
+                if (rank == cs::mpi_root) {
+                    std::cerr << "  ├─Distribution file '" << args.outfile.string() << "' does not exists. Error code: " << ec.value() << std::endl;
+                    std::cerr << "  └─Message: " << ec.message() << std::endl;
+                }
+                throw std::runtime_error("Distribution file does not exists.");
+            }
+        }
         if (rank == cs::mpi_root) std::cout << "  ├─Absolute distribution file path: " << args.distribution.string() << std::endl;
 
+        if (_args.is_used("--adios_conf")) {
+            args.adios_conf = fs::absolute(_args.get<std::string>("--adios_conf"), ec);
+
+            if (ec) {
+                if (rank == cs::mpi_root) {
+                    std::cerr << "  ├─Cannot resolve output file path '" << _args.get<std::string>("--output") << "' due to error with code: " << ec.value() << std::endl;
+                    std::cerr << "  └─Message: " << ec.message() << std::endl;
+                }
+                throw std::runtime_error("Cannot resolve specified output file basename due to error");
+            }
+            if (!fs::exists(args.adios_conf, ec)) {
+                if (ec) {
+                    if (rank == cs::mpi_root) {
+                        std::cerr << "  ├─Can not check distribution file '" << args.outfile.string() << "' existense. Error code: " << ec.value() << std::endl;
+                        std::cerr << "  └─Message: " << ec.message() << std::endl;
+                    }
+                    throw std::runtime_error("Can not check distribution file existense.");
+                } else {
+                    if (rank == cs::mpi_root) {
+                        std::cerr << "  ├─Distribution file '" << args.outfile.string() << "' does not exists. Error code: " << ec.value() << std::endl;
+                        std::cerr << "  └─Message: " << ec.message() << std::endl;
+                    }
+                    throw std::runtime_error("Distribution file does not exists.");
+                }
+            }
+            if (rank == cs::mpi_root) std::cout << "  ├─ADIOS2 configuration: " << args.adios_conf.string() << std::endl;
+        } else {
+            if (rank == cs::mpi_root) std::cout << "  ├─ADIOS2 configuration: builtin" << std::endl;
+        }
+
         if (_args.is_used("--output")) {
-            args.outfile = fs::absolute(_args.get<std::string>("--output"), ec);
+            args.outfile_base = fs::absolute(_args.get<std::string>("--output"), ec);
 
             if (ec) {
                 if (rank == cs::mpi_root) {
@@ -188,24 +234,25 @@ namespace mdn{
                 throw std::runtime_error("Cannot resolve specified output file basename due to error");
             }
         } else {
-            args.outfile = cwd / folders::post_process_folder / files::output_datafile_basename;
-            if (fs::exists(args.outfile, ec)) {
+            args.outfile_base = cwd / folders::post_process_folder / files::output_datafile_basename;
+            if (fs::exists(args.outfile_base, ec)) {
                 if (ec) {
                     if (rank == cs::mpi_root) {
-                        std::cerr << "  ├─Can not check output file '" << args.outfile.string() << "' existense. Error code: " << ec.value() << std::endl;
+                        std::cerr << "  ├─Can not check output file '" << args.outfile_base.string() << "' existense. Error code: " << ec.value() << std::endl;
                         std::cerr << "  └─Message: " << ec.message() << std::endl;
                     }
                     throw std::runtime_error("Can not check output file existense.");
                 } else {
                     if (rank == cs::mpi_root) {
-                        std::cerr << "  ├─Default output file '" << args.outfile.string() << "' already exists. Error code: " << ec.value() << std::endl;
+                        std::cerr << "  ├─Default output file '" << args.outfile_base.string() << "' already exists. Error code: " << ec.value() << std::endl;
                         std::cerr << "  └─Message: " << ec.message() << std::endl;
                     }
                     throw std::runtime_error("Default output file already exists.");
                 }
             }
         }
-        if (rank == cs::mpi_root) std::cout << "  ├─Template output file path: " << args.outfile.string() << std::endl;
+        if (rank == cs::mpi_root) std::cout << "  ├─Template output file path: " << args.outfile_base.string() << std::endl;
+        args.outfile = args.outfile_base.parent_path() / (args.outfile_base.filename().string() + "." + std::to_string(rank));
 
         fs::path ofpp = args.outfile.parent_path();
         if (rank == cs::mpi_root){

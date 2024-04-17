@@ -78,7 +78,9 @@ namespace mdn{
         int mode = 0;
         bool verbose = false;
         fs::path outfile = "/";
+        fs::path outfile_base = "/";
         fs::path distribution = "/";
+        fs::path adios_conf = "";
         bool cache = false;
     };
 
@@ -89,26 +91,40 @@ namespace mdn{
         ~MDN() = default;
 
         RETURN_CODES parse_args(const int argc, const char ***argv);
-        RETURN_CODES start(const int argc, const char ***argv);
+        void start(const int argc, const char ***argv);
 
     protected:
         spdlog::logger logger = spdlog::logger("default");
         std::shared_ptr<spdlog::sinks::stdout_color_sink_mt> console_sink;
         std::shared_ptr<spdlog::sinks::basic_file_sink_mt> file_sink;
-        fs::path cwd = "/";
-        Arguments args;
+
         const int rank = 0;
         const int size = 0;
         const MPI_Comm wcomm = MPI_COMM_WORLD;
+
+        fs::path cwd = "/";
+        fs::path wfile = "/";
         std::string_view prefix;
+        Arguments args;
+
+        uint64_t _Natoms = 0;
+        uint64_t max_cluster_size = 0;
+        std::map<fs::path, std::pair<int, int>> storages;
+
+        MPI_File fh;
+        MPI_Status status;
+        MPI_Offset off;
+        MPI_Request req;
+        bool cont = false;
+        int amode;
 
         void setup_logger(const int);
-        RETURN_CODES run(const fs::path &, const std::map<fs::path, std::pair<int, int>> &, const uint64_t, uint64_t&);
+        void sanity();
+        void setup();
 
-        // funcitons different for (non) root workers
-        virtual RETURN_CODES sanity();
-        virtual RETURN_CODES setup();
-        virtual RETURN_CODES entry();
+        void pre_process();
+        void post_process();
+        void run();
 
         // utility functions
         json parse_json(const fs::path&, const std::string&);
@@ -119,9 +135,11 @@ namespace mdn{
         using MDN::MDN;
 
     private:
-        RETURN_CODES sanity() override;
-        RETURN_CODES entry() override;
-        RETURN_CODES setup() override;
+        void sanity();
+        void setup();
+
+        void pre_process();
+        void post_process();
 
         std::map<int, std::string> gather_storages();
     };

@@ -14,37 +14,37 @@ namespace mdn {
     using json = nlohmann::json;
     namespace fs = std::filesystem;
 
-    RETURN_CODES MDN_root::sanity(){
+    void MDN_root::sanity(){
         int rnd = std::rand();
-        std::cout << "      Bcasting: " << rnd << std::endl;
+        std::cout << "  ├─Bcasting: " << rnd << std::endl;
         MPI_Bcast(&rnd, 1, MPI_INT, cs::mpi_root, wcomm);
         int *responces = new int[size];
-        std::cout << "      Gathering..." << std::endl;
+        std::cout << "  ├─Gathering..." << std::endl;
         MPI_Gather(&rnd, 1, MPI_INT, responces, 1, MPI_INT, cs::mpi_root, wcomm);
 
         if (responces[0] != rnd){
-            std::cerr << "Root sanity doesn't passed" << std::endl;
+            std::cerr << "  └─Root sanity doesn't passed" << std::endl;
             throw std::runtime_error("Root sanity doesn't passed");
         }
 
-        logger.info(std::string("Random int: " + std::to_string(rnd)));
-        logger.info(std::string("Received arrray:"));
+        // logger.info(std::string("Random int: " + std::to_string(rnd)));
+        // logger.info(std::string("Received arrray:"));
+        std::cout << "  ├─Received array: ";
         for (int i = 0; i < size; ++i)
         {
-            logger.info(std::to_string(responces[i]));
+            std::cout << responces[i] << " ";
             if (responces[i] - i != rnd)
             {
-                std::cerr << "Root sanity doesn't passed" << std::endl;
+                std::cerr << "  └─Root sanity doesn't passed" << std::endl;
                 throw std::runtime_error("Root sanity doesn't passed");
             }
         }
-        std::cout << "      Root sanity OK" << std::endl;
-        std::cout << "      Releasing sanity barrier" << std::endl;
+        std::cout << "  ├─Root sanity OK" << std::endl;
+        std::cout << "  ├─Releasing sanity barrier" << std::endl;
         SANITY_BARRIER(wcomm);
-        std::cout << "      Sanity barrier released" << std::endl;
+        std::cout << "  └─Sanity barrier released" << std::endl;
 
         delete[] responces;
-        return RETURN_CODES::OK;
     }
 
     std::map<int, std::string> MDN_root::gather_storages(){
@@ -62,7 +62,7 @@ namespace mdn {
                     char* buf = new char[count];
                     MPI_Recv(buf, count, MPI_CHAR, i, MPI_TAGS::STOR, wcomm, &status);
                     storages.emplace(i, std::string(buf, count));
-                    delete buf;
+                    delete[] buf;
                     flag = 0;
                     status = MPI_Status();
                     ncw.erase(i);
@@ -72,8 +72,8 @@ namespace mdn {
         return storages;
     }
 
-    RETURN_CODES MDN_root::setup(){
-        std::cout << "Sanity:" << std::endl;
+    void MDN_root::setup(){
+        std::cout << "├─Sanity:" << std::endl;
         TRY
             sanity();
         CATCH_NOLOGGER("Error while checking sanity")
@@ -82,30 +82,29 @@ namespace mdn {
         fs::path log_folder = cwd / folders::log;
         if (!fs::exists(log_folder)){
             if (!fs::create_directories(log_folder, ec)){
-                std::cerr << "Cannot create non-existent directories: " << log_folder.string() << std::endl;
-                std::cerr << "Error code: " << ec.value() << std::endl;
-                std::cerr << "Message: " << ec.message() << std::endl;
+                std::cerr << "├─Cannot create non-existent directories: " << log_folder.string() << std::endl;
+                std::cerr << "├─Error code: " << ec.value() << std::endl;
+                std::cerr << "└─Message: " << ec.message() << std::endl;
                 throw std::runtime_error("Cannot create non-existent directory: " + log_folder.string());
             }else{
-                std::cout << "Created logging directory: " << log_folder << std::endl;
+                std::cout << "├─Created logging directory: " << log_folder << std::endl;
             }
         }else{
-            std::cout << "Logging folder exists" << std::endl;
+            std::cout << "├─Logging folder exists" << std::endl;
         }
 
-        std::cout << "  Releasing setup barrier" << std::endl;
+        std::cout << "├─Releasing setup barrier" << std::endl;
         SETUP_BARRIER(wcomm);
-        std::cout << "  Setup barrier released" << std::endl;
+        std::cout << "├─Setup barrier released" << std::endl;
 
         TRY
             setup_logger(rank);
         CATCH("Error while setting up logger")
 
-        std::cout << "  Root setup OK" << std::endl;
-        return RETURN_CODES::OK;
+        std::cout << "└─Root setup OK" << std::endl;
     }
 
-    RETURN_CODES MDN::sanity(){
+    void MDN::sanity(){
         int rnd;
         MPI_Bcast(&rnd, 1, MPI_INT, cs::mpi_root, wcomm);
         // sts.logger.info(std::string("Got number: " + std::to_string(rnd)));
@@ -114,11 +113,9 @@ namespace mdn {
         int *responces = NULL;
         MPI_Gather(&rnd, 1, MPI_INT, responces, 0, MPI_INT, cs::mpi_root, wcomm);
         SANITY_BARRIER(wcomm);
-
-        return RETURN_CODES::OK;
     }
 
-    RETURN_CODES MDN::setup(){
+    void MDN::setup(){
         TRY
             sanity();
         CATCH_NOLOGGER("Error while checking sanity")
@@ -128,8 +125,6 @@ namespace mdn {
         TRY
             setup_logger(rank);
         CATCH("Error while setting up logger")
-
-        return RETURN_CODES::OK;
     }
 
 } // namespace mdn
