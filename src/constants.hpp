@@ -16,8 +16,9 @@ namespace mdn{
         constexpr const std::string_view output_datafile_basename("data.bp");
         constexpr const std::string_view distribution_cache("distribution.cache");
         constexpr const std::string_view storages_cache("storages.cache");
-        constexpr const std::string_view matrix_csv("matrix.csv");
-        constexpr const std::string_view temps_csv("temps.csv");
+        constexpr const std::string_view dist_csv("cldist.csv");
+        constexpr const std::string_view temp_csv("cltemps.csv");
+        constexpr const std::string_view comp_data("rdata.csv");
     }
     namespace folders
     {

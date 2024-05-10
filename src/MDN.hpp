@@ -110,6 +110,9 @@ namespace mdn{
         uint64_t _Natoms = 0;
         uint64_t max_cluster_size = 0;
         std::map<fs::path, std::pair<int, int>> storages;
+        std::vector<uint64_t> sizes;
+        double time_step;
+        uint64_t distance;
 
         MPI_File fh;
         MPI_Status status;
@@ -118,16 +121,21 @@ namespace mdn{
         bool cont = false;
         int amode;
 
-        void setup_logger(const int);
-        void sanity();
-        void setup();
+        uint64_t done_steps_primary = 0;
 
-        void pre_process();
-        void post_process();
+        void setup_logger(const int);
         void run();
+        void sstage();
+
+        virtual void sanity();
+        virtual void setup();
+        virtual void pre_process();
+        virtual void post_process();
 
         // utility functions
         json parse_json(const fs::path&, const std::string&);
+        std::tuple<uint64_t, uint64_t, double, double, double, double, double, double, double, double>
+        get_row(const uint64_t&, const std::vector<uint64_t>&, const double&, const uint64_t&, const double&, const uint64_t&);
     };
 
     class MDN_root : public MDN{
@@ -135,11 +143,11 @@ namespace mdn{
         using MDN::MDN;
 
     private:
-        void sanity();
-        void setup();
+        virtual void sanity() override;
+        virtual void setup() override;
 
-        void pre_process();
-        void post_process();
+        virtual void pre_process() override;
+        virtual void post_process() override;
 
         std::map<int, std::string> gather_storages();
     };

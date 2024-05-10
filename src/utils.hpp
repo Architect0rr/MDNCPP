@@ -70,20 +70,34 @@ namespace mdn{
         // spdlog::flush_every(std::chrono::seconds(10));
     }
 
+    std::map<int, std::map<fs::path, std::pair<int, int>>> parse_dist(const json& j) {
+        std::map<int, std::map<fs::path, std::pair<int, int>>> result;
+        std::map<fs::path, std::pair<int, int>> innerMap;
+
+        for (const auto& [key, value] : j.items()) {
+            for (const auto& [innerKey, innerValue] : value.items())
+                innerMap[fs::path(innerKey)] = std::make_pair(static_cast<int>(innerValue[0]), static_cast<int>(innerValue[1]));
+
+            result[std::stoi(key)] = innerMap;
+            innerMap.clear();
+        }
+        return result;
+    }
+
     RETURN_CODES MDN::parse_args(const int argc, const char ***argv) {
         argparse::ArgumentParser _args = argparse::ArgumentParser("MDNCPP", __MDNCPP_VERSION__, argparse::default_arguments::help & argparse::default_arguments::version, false);
 
         _args.add_argument("-d", "--debug").help("Turn on debug").flag();
         _args.add_argument("-t", "--trace").help("Turn on trace (enables debug)").flag();
-        _args.add_argument("-a", "--adios_conf").help("Path to ADIOS2 xml config file").default_value(std::string_view("./adios2_BP4_config.xml"));
-        _args.add_argument("-D", "--distribution").help("Path to distribution file").default_value(std::string_view("./dist.json"));
+        _args.add_argument("-a", "--adios_conf").help("Path to ADIOS2 xml config file").default_value("./adios2_BP4_config.xml");
+        _args.add_argument("-D", "--distribution").help("Path to distribution file").default_value("./dist.json");
         _args.add_argument("-m", "--mode").help("Mode to run").scan<'i', int>().default_value(0);
-        _args.add_argument("-o", "--output").help("Output file basename").default_value(std::string_view("data.bp"));
-        _args.add_argument("-w", "--working_directory").help("Set current working directory").default_value(std::string_view("./"));
+        _args.add_argument("-o", "--output").help("Output file basename").default_value("data.bp");
+        _args.add_argument("-w", "--working_directory").help("Set current working directory").default_value("./");
         _args.add_argument("-v", "--verbose").help("Print log to stdout").flag();
         _args.add_argument("-c", "--cache").help("Cache some internal variables (does not affect heavy computations, may speedup startup)").flag();
-        _args.add_argument("-h", "--help").flag().help("Show help (this) message");
-        _args.add_argument("--version").flag().help("Show version");
+        _args.add_argument("-h", "--help").help("Show help (this) message").flag();
+        _args.add_argument("--version").help("Show version").flag();
         _args.add_description(std::string("Generate cluster distribution matrix from ADIOS2 LAMMPS data. Version: ") + std::string(__MDNCPP_VERSION__));
         _args.add_epilog("Author: Perevoshchikov Egor, 2023-2024");
 

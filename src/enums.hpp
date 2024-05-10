@@ -4,9 +4,10 @@
 namespace mdn{
     enum MPI_TAGS : int
     {
-        SANITY,
+        SANITY = 0,
         STATE,
-        STOR
+        STOR,
+        OUTFILE_EXCHANGE
     };
 
     enum RETURN_CODES : int

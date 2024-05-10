@@ -102,15 +102,11 @@ if(NOT TARGET OpenMP::OpenMP_CXX)
     add_library(OpenMP::OpenMP_CXX IMPORTED INTERFACE)
     set_property(TARGET OpenMP::OpenMP_CXX
                  PROPERTY INTERFACE_COMPILE_OPTIONS ${OpenMP_CXX_FLAGS})
-    # Only works if the same flag is passed to the linker; use CMake 3.9+ otherwise (Intel, AppleClang)
     set_property(TARGET OpenMP::OpenMP_CXX
                  PROPERTY INTERFACE_LINK_LIBRARIES ${OpenMP_CXX_FLAGS} Threads::Threads)
 
 endif()
 
-
-# add_library(yas INTERFACE)
-# target_include_directories(yas INTERFACE ${PROJECT_SOURCE_DIR}/lib/yas/include)
 
 configure_file(${PROJECT_SOURCE_DIR}/src/config.hpp.in ${PROJECT_SOURCE_DIR}/src/config.hpp @ONLY)
 
@@ -123,7 +119,6 @@ target_link_libraries(${PROJECT_NAME} PRIVATE spdlog::spdlog)
 target_link_libraries(${PROJECT_NAME} PRIVATE argparse)
 target_link_libraries(${PROJECT_NAME} PRIVATE fmt::fmt)
 target_link_libraries(${PROJECT_NAME} PRIVATE nlohmann_json::nlohmann_json)
-# target_link_libraries(${PROJECT_NAME} PRIVATE yas)
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})

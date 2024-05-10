@@ -1,4 +1,5 @@
 #ifndef __ZIP_ALGO__
+#define __ZIP_ALGO__
 
 namespace mdn{
 

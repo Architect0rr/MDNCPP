@@ -20,7 +20,6 @@
     #include "zip.hpp"
 #endif // !__cpp_lib_ranges_zip
 
-
 namespace mdn{
 
     template <typename T, uint64_t N>
@@ -50,15 +49,6 @@ namespace mdn{
 
     namespace fs = std::filesystem;
     void MDN::run(){
-        // MPI_Offset off = rank*sizeof(int)*2;
-
-        // // MPI_File_set_view(&fh, off, MPI_INT, , MPI_INFO_NULL);
-        // MPI_File_write_at_all(fh, off, &rank, 1, MPI_INT, &status);
-        // int data;
-        // MPI_File_read_at_all(fh, off, &data, 1, MPI_INT, &status);
-        // if (data == rank)
-        //     std::cout << "OK" << std::endl;
-
         int storages_to_skip = -1;
         uint64_t steps_to_skip = -1;
         MPI_File_open(wcomm, wfile.string().c_str(), amode, MPI_INFO_NULL, &fh);
@@ -66,7 +56,6 @@ namespace mdn{
             MPI_File_read_at(fh, off, &storages_to_skip, 1, MPI_INT, &status);
             MPI_File_read_at(fh, off+sizeof(int), &steps_to_skip, 1, MPI_UINT64_T, &status);
         }
-        // MPI_File_iwrite_at(fh, off, &rank, 1, MPI_INT, &req);
 
         adios2::ADIOS adios;
         if (args.adios_conf.string().length() > 0)
@@ -76,7 +65,7 @@ namespace mdn{
         logger.debug("ADIOS2 initialized");
         adios2::IO dataio   = adios.DeclareIO("DataWriter");
         adios2::IO lmpsio   = adios.DeclareIO("LAMMPSReader");
-        if (args.adios_conf.string().length() > 0){
+        if (!(args.adios_conf.string().length() > 0)){
             dataio.SetEngine("BP4");
             lmpsio.SetEngine("BP4");
         }
@@ -86,7 +75,7 @@ namespace mdn{
         logger.debug("ADIOS2 IO DataWriter initialized");
 
         adios2::Variable<uint64_t> WvarNstep  = dataio.DefineVariable<uint64_t>("ntimestep");
-        adios2::Variable<uint64_t> WvarN      = dataio.DefineVariable<uint64_t>("Natoms");
+        adios2::Variable<uint64_t> WvarN      = dataio.DefineVariable<uint64_t>("natoms");
         adios2::Variable<uint64_t> WvarDist   = dataio.DefineVariable<uint64_t>("dist",     {_Natoms + 1}, {0}, {_Natoms + 1}, adios2::ConstantDims);
         adios2::Variable<double>   WvarTemps  = dataio.DefineVariable<double>  ("temps",    {_Natoms + 1}, {0}, {_Natoms + 1}, adios2::ConstantDims);
         adios2::Variable<double>   WvarVol    = dataio.DefineVariable<double>  ("volume");
@@ -231,7 +220,7 @@ namespace mdn{
         for (const auto &[storage, steps] : storages) total_steps += steps.second - steps.first;
 
         logger.debug("Starting main loop");
-        uint64_t done_steps = 0;
+        done_steps_primary = 0;
         int storage_index = -1;
         for (const auto &[storage, steps] : storages){
             ++storage_index;
@@ -271,8 +260,14 @@ namespace mdn{
                     TPstep.start();
                 #endif // __MDN_PROFILING__
 
+                #ifdef __MDN_TRACE_OUT__
+                    logger.trace("Writing current state to start-stop file: {}, {}", storage_index, currentStep);
+                #endif // __MDN_TRACE_OUT__
                 MPI_File_write_at(fh, off, &storage_index, 1, MPI_INT, &status);
                 MPI_File_write_at(fh, off + sizeof(int), &currentStep, 1, MPI_UINT64_T, &status);
+                #ifdef __MDN_TRACE_OUT__
+                    logger.trace("Written current state to start-stop file");
+                #endif // __MDN_TRACE_OUT__
 
                 while (currentStep != steps.first + steps.second) {
                     if (reader.BeginStep() == adios2::StepStatus::EndOfStream){
@@ -381,7 +376,7 @@ namespace mdn{
                             for (const auto &[vel, mass] : std::ranges::views::zip(velocities, masses))
                         #endif // !__cpp_lib_ranges_zip
                         {
-                                kes.emplace_back(mass * vel / 2);
+                                kes.emplace_back(mass * vel*vel / 2);
                                 total_temp += kes.back();
                         }
                     #else
@@ -587,12 +582,13 @@ namespace mdn{
                         TPstep.cutoff();
                     #endif // __MDN_PROFILING__
 
-                    ++done_steps;
+                    ++done_steps_primary;
                     Tmisc.check();
                     if (Tmisc.count() > 60*1000){
                         MPI_File_iwrite_at(fh, off + sizeof(int), &currentStep, 1, MPI_UINT64_T, &req);
                         Tmisc.b();
-                        logger.debug("Progress:     {}%", static_cast<long double>(done_steps) / total_steps);
+                        logger.debug("Progress:     {}%", (static_cast<long double>(done_steps_primary) / total_steps)*100.0);
+
                         #ifdef __MDN_PROFILING__
                             logger.info("###################");
                             logger.info("Profiling:");
@@ -614,7 +610,7 @@ namespace mdn{
                             logger.info("  └─Not stated   {} ms", auxtime);
                             logger.info("###################");
                         #endif // !__MDN_PROFILING__
-                        }
+                    }
                     logger.flush();
                 }
 

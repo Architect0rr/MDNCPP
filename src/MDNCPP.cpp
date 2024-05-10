@@ -50,29 +50,42 @@ namespace mdn{
         if (data.contains(fields::Natoms)) _Natoms = data.at(fields::Natoms).get<uint64_t>();
         else throw std::runtime_error("Datafile does not contains '" + std::string(fields::Natoms) + "' field");
 
+        logger.debug("Reading distribution file");
         json dist = parse_json(cwd / files::distribution, "Distribution");
         std::map<int, std::map<fs::path, std::pair<int, int>>> distribution;
+        logger.debug("Parsing distribution");
         TRY
-            distribution = dist.get<std::map<int, std::map<fs::path, std::pair<int, int>>>>();
+            distribution = parse_dist(dist);
         CATCH("Error while parsing distribution")
         storages = distribution.at(rank);
 
+        logger.debug("Checking for distribution hash in datafile");
         if (data.contains(fields::Dhash)){
+            logger.debug("Datafile contains distribution hash");
             const unsigned long Dhash = data.at(fields::Dhash).get<const unsigned long>();
             const unsigned long hash = std::hash<json>{}(dist);
-            if (Dhash == hash) cont = true;
+            if (Dhash == hash) {
+                cont = true;
+                logger.debug("Distribution hash matches current distribution hash, allowing continuation");
+            }
+        } else {
+            logger.debug("Datafile does not contains distribution hash");
         }
 
-        wfile = cwd / "stat";
-        int amode = MPI_MODE_RDWR;
+        wfile = cwd / "statfile";
+        amode = MPI_MODE_RDWR;
+        logger.debug("Checking for start-stop file existence: {}", wfile.string());
         if (!fs::exists(wfile)) {
             amode = MPI_MODE_CREATE | amode;
             cont = false;
+            logger.debug("start-stop file does not exists, will create it, disabling continuation");
+        } else {
+            logger.debug("start-stop file exists");
         }
         off = rank * (sizeof(int) + sizeof(uint64_t));
     }
 
-    void MDN_root::pre_process(){
+    void MDN_root::pre_process() {
         MDN::pre_process();
 
         json data = parse_json(cwd / files::data, "Datafile");
@@ -108,14 +121,13 @@ namespace mdn{
     }
 
     void MDN::post_process(){
-        uint64_t *max_sizes = new uint64_t[size];
-        MPI_Gather(&max_cluster_size, 1, MPI_UINT64_T, max_sizes, 1, MPI_UINT64_T, cs::mpi_root, wcomm);
-        max_cluster_size = *std::max_element(max_sizes, max_sizes + size);
-        delete[] max_sizes;
+        logger.debug("Gathering max cluster size");
+        std::unique_ptr<uint64_t[]> max_sizes(new uint64_t[size]);
+        // uint64_t *max_sizes = new uint64_t[size];
+        MPI_Gather(&max_cluster_size, 1, MPI_UINT64_T, max_sizes.get(), 1, MPI_UINT64_T, cs::mpi_root, wcomm);
+        max_cluster_size = *std::max_element(max_sizes.get(), max_sizes.get() + size);
+        // delete[] max_sizes;
         logger.debug("Gathered max cluster size");
-
-        // MPI_Send(args.outfile.string().c_str(), args.outfile.string().length(), MPI_CHAR, cs::mpi_root, MPI_TAGS::STOR, wcomm);
-        // logger.debug("Gathered storages");
 
         logger.info("Exiting entry point. NO RETURN");
     }
@@ -123,12 +135,8 @@ namespace mdn{
     void MDN_root::post_process(){
         MDN::post_process();
 
-        // std::map<int, std::string> storages = gather_storages();
-        // logger.debug("Gathered storages");
-
         json ddata = parse_json(cwd / files::data, "Datafile");
         ddata[fields::maxclsize] = max_cluster_size;
-        ddata[fields::outfiles] = storages;
 
         logger.debug("Updating datafile");
         TRY
