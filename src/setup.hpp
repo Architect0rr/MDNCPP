@@ -1,9 +1,10 @@
 #ifndef __MDN_SETUP__
 #define __MDN_SETUP__
 
-#include "nlohmann/json.hpp"
+#include <memory>
 
 #include "mpi.h"
+#include "nlohmann/json.hpp"
 
 #include "utils.hpp"
 #include "barriers.hpp"
@@ -18,9 +19,10 @@ namespace mdn {
         int rnd = std::rand();
         std::cout << "  ├─Bcasting: " << rnd << std::endl;
         MPI_Bcast(&rnd, 1, MPI_INT, cs::mpi_root, wcomm);
-        int *responces = new int[size];
+
+        std::unique_ptr<int[]> responces(new int[mpi_size]);
         std::cout << "  ├─Gathering..." << std::endl;
-        MPI_Gather(&rnd, 1, MPI_INT, responces, 1, MPI_INT, cs::mpi_root, wcomm);
+        MPI_Gather(&rnd, 1, MPI_INT, responces.get(), 1, MPI_INT, cs::mpi_root, wcomm);
 
         if (responces[0] != rnd){
             std::cerr << "  └─Root sanity doesn't passed" << std::endl;
@@ -30,7 +32,7 @@ namespace mdn {
         // logger.info(std::string("Random int: " + std::to_string(rnd)));
         // logger.info(std::string("Received arrray:"));
         std::cout << "  ├─Received array: ";
-        for (int i = 0; i < size; ++i)
+        for (int i = 0; i < mpi_size; ++i)
         {
             std::cout << responces[i] << " ";
             if (responces[i] - i != rnd)
@@ -44,13 +46,13 @@ namespace mdn {
         SANITY_BARRIER(wcomm);
         std::cout << "  └─Sanity barrier released" << std::endl;
 
-        delete[] responces;
+        // delete[] responces;
     }
 
     std::map<int, std::string> MDN_root::gather_storages(){
         std::map<int, std::string> storages;
         std::set<int> ncw;
-        for (int i = 1; i < size; ++i) ncw.emplace(i);
+        for (int i = 1; i < mpi_size; ++i) ncw.emplace(i);
         MPI_Status status;
         int flag = 0;
         int count{};
@@ -98,7 +100,7 @@ namespace mdn {
         std::cout << "├─Setup barrier released" << std::endl;
 
         TRY
-            setup_logger(rank);
+            setup_logger(mpi_rank);
         CATCH("Error while setting up logger")
 
         std::cout << "└─Root setup OK" << std::endl;
@@ -107,9 +109,7 @@ namespace mdn {
     void MDN::sanity(){
         int rnd;
         MPI_Bcast(&rnd, 1, MPI_INT, cs::mpi_root, wcomm);
-        // sts.logger.info(std::string("Got number: " + std::to_string(rnd)));
-        rnd += rank;
-        // sts.logger.info(std::string("Sending back: " + std::to_string(rnd)));
+        rnd += mpi_rank;
         int *responces = NULL;
         MPI_Gather(&rnd, 1, MPI_INT, responces, 0, MPI_INT, cs::mpi_root, wcomm);
         SANITY_BARRIER(wcomm);
@@ -123,7 +123,7 @@ namespace mdn {
         SETUP_BARRIER(wcomm);
 
         TRY
-            setup_logger(rank);
+            setup_logger(mpi_rank);
         CATCH("Error while setting up logger")
     }
 

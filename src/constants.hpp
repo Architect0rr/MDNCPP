@@ -17,7 +17,7 @@ namespace mdn{
         constexpr const std::string_view distribution_cache("distribution.cache");
         constexpr const std::string_view storages_cache("storages.cache");
         constexpr const std::string_view dist_csv("cldist.csv");
-        constexpr const std::string_view temp_csv("cltemps.csv");
+        constexpr const std::string_view temp_csv("cltemp.csv");
         constexpr const std::string_view comp_data("rdata.csv");
     }
     namespace folders
@@ -36,6 +36,8 @@ namespace mdn{
         constexpr const std::string_view Volume("Volume");
         constexpr const std::string_view Dims("dimensions");
         constexpr const std::string_view data_processing_folder("post_process_folder");
+        constexpr const std::string_view done_steps("done_steps");
+        constexpr const std::string_view total_steps("total_steps");
     }
     namespace lcf
     {

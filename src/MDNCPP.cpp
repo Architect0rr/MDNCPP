@@ -14,6 +14,7 @@
 #include "utils.hpp"
 #include "setup.hpp"
 #include "logic.hpp"
+#include "stage2.hpp"
 
 namespace mdn{
 
@@ -57,7 +58,7 @@ namespace mdn{
         TRY
             distribution = parse_dist(dist);
         CATCH("Error while parsing distribution")
-        storages = distribution.at(rank);
+        storages = distribution.at(mpi_rank);
 
         logger.debug("Checking for distribution hash in datafile");
         if (data.contains(fields::Dhash)){
@@ -82,7 +83,7 @@ namespace mdn{
         } else {
             logger.debug("start-stop file exists");
         }
-        off = rank * (sizeof(int) + sizeof(uint64_t));
+        off = mpi_rank * (sizeof(int) + sizeof(uint64_t));
     }
 
     void MDN_root::pre_process() {
@@ -91,7 +92,7 @@ namespace mdn{
         json data = parse_json(cwd / files::data, "Datafile");
         json dist = parse_json(cwd / files::distribution, "Distribution");
         std::vector<std::string> outfiles;
-        for (int i = 0; i < size; ++i) outfiles.push_back((args.outfile_base.parent_path() / (args.outfile_base.filename().string() + "." + std::to_string(i))).string());
+        for (int i = 0; i < mpi_size; ++i) outfiles.push_back(args.outfile_base / ("data.bp." + std::to_string(mpi_rank)));
         data[fields::outfiles] = outfiles;
         const unsigned long hash = std::hash<json>{}(dist);
         data[fields::Dhash] = hash;
@@ -122,21 +123,31 @@ namespace mdn{
 
     void MDN::post_process(){
         logger.debug("Gathering max cluster size");
-        std::unique_ptr<uint64_t[]> max_sizes(new uint64_t[size]);
+        std::unique_ptr<uint64_t[]> max_sizes(new uint64_t[mpi_size]);
         // uint64_t *max_sizes = new uint64_t[size];
         MPI_Gather(&max_cluster_size, 1, MPI_UINT64_T, max_sizes.get(), 1, MPI_UINT64_T, cs::mpi_root, wcomm);
-        max_cluster_size = *std::max_element(max_sizes.get(), max_sizes.get() + size);
+        max_cluster_size = *std::max_element(max_sizes.get(), max_sizes.get() + mpi_size);
         // delete[] max_sizes;
         logger.debug("Gathered max cluster size");
+
+        logger.debug("Gathering done steps count");
+        done_steps = std::make_unique<uint64_t[]>(mpi_size);
+        MPI_Gather(&done_steps_primary, 1, MPI_UINT64_T, done_steps.get(), 1, MPI_UINT64_T, cs::mpi_root, wcomm);
+        logger.debug("Gathered done steps count");
 
         logger.info("Exiting entry point. NO RETURN");
     }
 
     void MDN_root::post_process(){
         MDN::post_process();
+        std::vector<uint64_t> _done_steps(done_steps.get(), done_steps.get() + mpi_size);
+        uint64_t overall_total_steps = 0;
+        for (const uint64_t& el : _done_steps) overall_total_steps += el;
 
         json ddata = parse_json(cwd / files::data, "Datafile");
         ddata[fields::maxclsize] = max_cluster_size;
+        ddata[fields::done_steps] = _done_steps;
+        ddata[fields::total_steps] = overall_total_steps;
 
         logger.debug("Updating datafile");
         TRY
@@ -151,7 +162,7 @@ namespace mdn{
         TRY
             if (parse_args(argc, argv) == RETURN_CODES::EXIT) return;
         CATCH_NOLOGGER("Error while parsing args")
-        if (rank == cs::mpi_root) std::cout << "Setup..." << std::endl;
+        if (mpi_rank == cs::mpi_root) std::cout << "Setup..." << std::endl;
         TRY
             setup();
             logger.info("-!-Initialized-!-");
@@ -164,6 +175,9 @@ namespace mdn{
             run();
             logger.info("Calculations ended");
         CATCH("Error while doing caculations")
+        TRY
+            sstage();
+        CATCH("Error in entry point")
         TRY
             post_process();
         CATCH("Error in entry point")

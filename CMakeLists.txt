@@ -107,6 +107,7 @@ if(NOT TARGET OpenMP::OpenMP_CXX)
 
 endif()
 
+include_directories(${PROJECT_SOURCE_DIR}/src/CSV/CSV)
 
 configure_file(${PROJECT_SOURCE_DIR}/src/config.hpp.in ${PROJECT_SOURCE_DIR}/src/config.hpp @ONLY)
 

@@ -7,13 +7,13 @@
     try {
 #define CATCH_NOLOGGER(mess)                                                                         \
     }catch (const std::exception &e){                                                                \
-        std::cerr << "Rank: " << rank << " (" << prefix << ") "                                      \
+        std::cerr << "Rank: " << mpi_rank << " (" << prefix << ") "                                  \
                   << "Some std::exception was thrown, probably aborting. Context:" << std::endl;     \
         std::cerr << mess << std::endl;                                                              \
         std::cerr << e.what() << std::endl;                                                          \
         MPI_Abort(wcomm, RETURN_CODES::ERROR);                                                       \
     }catch (...){                                                                                    \
-        std::cerr << "Rank: " << rank << " (" << prefix << ") "                                      \
+        std::cerr << "Rank: " << mpi_rank << " (" << prefix << ") "                                  \
                   << "Some unknown exception was thrown, probably aborting. Context:." << std::endl; \
         std::cerr << mess << std::endl;                                                              \
         MPI_Abort(wcomm, RETURN_CODES::ERROR);                                                       \
@@ -54,8 +54,10 @@
 #endif // !__MDN_TRY_CATCH_MACRO__
 
 
-#include <filesystem>
 #include <map>
+#include <span>
+#include <memory>
+#include <filesystem>
 
 #include "enums.hpp"
 #include "adios2.h"
@@ -76,18 +78,22 @@ namespace mdn{
         bool debug = false;
         bool trace = false;
         int mode = 0;
+        uint64_t cut = 0;
         bool verbose = false;
         fs::path outfile = "/";
         fs::path outfile_base = "/";
         fs::path distribution = "/";
         fs::path adios_conf = "";
-        bool cache = false;
+        fs::path dist_csv = "";
+        fs::path temp_csv = "";
+        fs::path data_csv = "";
+        // bool cache = false;
     };
 
     class MDN{
     public:
         MDN() = delete;
-        MDN(const int rank = 0, const int size = 0, MPI_Comm comm = MPI_COMM_WORLD, const char *prefix = "unknown") noexcept : rank(rank), size(size), wcomm(comm), prefix(prefix) {}
+        MDN(const int rank = 0, const int size = 0, MPI_Comm comm = MPI_COMM_WORLD, const char *prefix = "unknown") noexcept : mpi_rank(rank), mpi_size(size), wcomm(comm), prefix(prefix) {}
         ~MDN() = default;
 
         RETURN_CODES parse_args(const int argc, const char ***argv);
@@ -98,8 +104,8 @@ namespace mdn{
         std::shared_ptr<spdlog::sinks::stdout_color_sink_mt> console_sink;
         std::shared_ptr<spdlog::sinks::basic_file_sink_mt> file_sink;
 
-        const int rank = 0;
-        const int size = 0;
+        const int mpi_rank = 0;
+        const int mpi_size = 0;
         const MPI_Comm wcomm = MPI_COMM_WORLD;
 
         fs::path cwd = "/";
@@ -110,7 +116,6 @@ namespace mdn{
         uint64_t _Natoms = 0;
         uint64_t max_cluster_size = 0;
         std::map<fs::path, std::pair<int, int>> storages;
-        std::vector<uint64_t> sizes;
         double time_step;
         uint64_t distance;
 
@@ -122,6 +127,9 @@ namespace mdn{
         int amode;
 
         uint64_t done_steps_primary = 0;
+        std::unique_ptr<uint64_t[]> done_steps;
+        uint64_t total_steps = 0;
+        int done_stages = 0;
 
         void setup_logger(const int);
         void run();
@@ -135,7 +143,7 @@ namespace mdn{
         // utility functions
         json parse_json(const fs::path&, const std::string&);
         std::tuple<uint64_t, uint64_t, double, double, double, double, double, double, double, double>
-        get_row(const uint64_t&, const std::vector<uint64_t>&, const double&, const uint64_t&, const double&, const uint64_t&);
+        get_row(const uint64_t&, const std::vector<uint64_t>& sizes, const std::span<const uint64_t>&, const double&, const uint64_t&, const double&, const uint64_t&);
     };
 
     class MDN_root : public MDN{

@@ -92,16 +92,15 @@ namespace mdn{
         _args.add_argument("-a", "--adios_conf").help("Path to ADIOS2 xml config file").default_value("./adios2_BP4_config.xml");
         _args.add_argument("-D", "--distribution").help("Path to distribution file").default_value("./dist.json");
         _args.add_argument("-m", "--mode").help("Mode to run").scan<'i', int>().default_value(0);
-        _args.add_argument("-o", "--output").help("Output file basename").default_value("data.bp");
+        _args.add_argument("-p", "--cut").help("Cut output matrices to this cluster size").scan<'i', uint64_t>().default_value(0);
         _args.add_argument("-w", "--working_directory").help("Set current working directory").default_value("./");
         _args.add_argument("-v", "--verbose").help("Print log to stdout").flag();
-        _args.add_argument("-c", "--cache").help("Cache some internal variables (does not affect heavy computations, may speedup startup)").flag();
         _args.add_argument("-h", "--help").help("Show help (this) message").flag();
         _args.add_argument("--version").help("Show version").flag();
         _args.add_description(std::string("Generate cluster distribution matrix from ADIOS2 LAMMPS data. Version: ") + std::string(__MDNCPP_VERSION__));
         _args.add_epilog("Author: Perevoshchikov Egor, 2023-2024");
 
-        if (rank == cs::mpi_root) std::cout << "Rank " << cs::mpi_root << "(root): " << "Parsing args:" << std::endl;
+        if (mpi_rank == cs::mpi_root) std::cout << "Rank " << cs::mpi_root << "(root): " << "Parsing args:" << std::endl;
 
         try
         {
@@ -109,7 +108,7 @@ namespace mdn{
         }
         catch (const std::exception &err)
         {
-            if (rank == 0) {
+            if (mpi_rank == 0) {
                 std::cerr << "  └─An error occured while parsing args: " << std::endl;
                 std::cerr << err.what() << std::endl;
                 std::cerr << _args << std::endl;
@@ -122,7 +121,7 @@ namespace mdn{
         cwd = fs::current_path(ec);
 
         if (ec) {
-            if (rank == cs::mpi_root) {
+            if (mpi_rank == cs::mpi_root) {
                 std::cerr << "  ├─Cannot get cwd due to error with code: " << ec.value() << std::endl;
                 std::cerr << "  └─Message: " << ec.message() << std::endl;
             }
@@ -132,7 +131,7 @@ namespace mdn{
                 fs::path abs_spec_path = fs::absolute(_args.get<std::string>("--working_directory"), ec);
 
                 if (ec) {
-                    if (rank == cs::mpi_root) {
+                    if (mpi_rank == cs::mpi_root) {
                         std::cerr << "  ├─Cannot resolve path '" << _args.get<std::string>("--working_directory") << "' due to error with code: " << ec.value() << std::endl;
                         std::cerr << "  └─Message: " << ec.message() << std::endl;
                     }
@@ -141,7 +140,7 @@ namespace mdn{
                 if (abs_spec_path != cwd) {
                     fs::current_path(abs_spec_path, ec);
                     if (ec) {
-                        if (rank == cs::mpi_root) {
+                        if (mpi_rank == cs::mpi_root) {
                             std::cerr << "  ├─Cannot change working directory to '" << abs_spec_path.string() << "' due to error with code: " << ec.value() << std::endl;
                             std::cerr << "  └─Message: " << ec.message() << std::endl;
                         }
@@ -150,41 +149,43 @@ namespace mdn{
                     cwd = abs_spec_path;
                 }
             }
-            if (rank == cs::mpi_root) std::cout << "  ├─Working in directiry: " << cwd.string() << std::endl;
+            if (mpi_rank == cs::mpi_root) std::cout << "  ├─Working in directiry: " << cwd.string() << std::endl;
         }
 
         if (argc <= 1 || _args["--help"] == true) {
-            if (rank == 0)
+            if (mpi_rank == 0)
                 std::cout << _args.help().str();
             return RETURN_CODES::EXIT;
         }
         if (_args["--version"] == true) {
-            if (rank == 0)
+            if (mpi_rank == 0)
                 std::cout << __MDNCPP_VERSION__ << std::endl;
             return RETURN_CODES::EXIT;
         }
 
         if (_args["--trace"] == true || _args["--debug"] == true){
             args.debug = true;
-            if (rank == cs::mpi_root) std::cout << "  ├─Enabling debug" << std::endl;
+            if (mpi_rank == cs::mpi_root) std::cout << "  ├─Enabling debug" << std::endl;
         }
 
         if (_args["--trace"] == true){
             args.trace = true;
-            if (rank == cs::mpi_root) std::cout << "  ├─Enabling trace" << std::endl;
+            if (mpi_rank == cs::mpi_root) std::cout << "  ├─Enabling trace" << std::endl;
         }
 
         if (_args["--verbose"] == true){
             args.verbose = true;
-            if (rank == cs::mpi_root) std::cout << "  ├─Enabling verbose" << std::endl;
+            if (mpi_rank == cs::mpi_root) std::cout << "  ├─Enabling verbose" << std::endl;
         }
 
         args.mode = _args.get<int>("--mode");
-        if (rank == cs::mpi_root) std::cout << "  ├─Working mode: " << args.mode << std::endl;
+        if (mpi_rank == cs::mpi_root) std::cout << "  ├─Working mode: " << args.mode << std::endl;
+
+        args.cut = _args.get<uint64_t>("--cut");
 
         args.distribution = fs::absolute(_args.get<std::string>("--distribution"), ec);
         if (ec) {
-            if (rank == cs::mpi_root) {
+            if (mpi_rank == cs::mpi_root) {
                 std::cerr << "  ├─Cannot resolve distribution file path '" << _args.get<std::string>("--output") << "' due to error with code: " << ec.value() << std::endl;
                 std::cerr << "  └─Message: " << ec.message() << std::endl;
             }
@@ -192,26 +193,26 @@ namespace mdn{
         }
         if (!fs::exists(args.distribution, ec)) {
             if (ec) {
-                if (rank == cs::mpi_root) {
-                    std::cerr << "  ├─Can not check distribution file '" << args.outfile.string() << "' existense. Error code: " << ec.value() << std::endl;
+                if (mpi_rank == cs::mpi_root) {
+                    std::cerr << "  ├─Can not check distribution file '" << args.distribution.string() << "' existense. Error code: " << ec.value() << std::endl;
                     std::cerr << "  └─Message: " << ec.message() << std::endl;
                 }
                 throw std::runtime_error("Can not check distribution file existense.");
             } else {
-                if (rank == cs::mpi_root) {
-                    std::cerr << "  ├─Distribution file '" << args.outfile.string() << "' does not exists. Error code: " << ec.value() << std::endl;
+                if (mpi_rank == cs::mpi_root) {
+                    std::cerr << "  ├─Distribution file '" << args.distribution.string() << "' does not exists. Error code: " << ec.value() << std::endl;
                     std::cerr << "  └─Message: " << ec.message() << std::endl;
                 }
                 throw std::runtime_error("Distribution file does not exists.");
             }
         }
-        if (rank == cs::mpi_root) std::cout << "  ├─Absolute distribution file path: " << args.distribution.string() << std::endl;
+        if (mpi_rank == cs::mpi_root) std::cout << "  ├─Absolute distribution file path: " << args.distribution.string() << std::endl;
 
         if (_args.is_used("--adios_conf")) {
             args.adios_conf = fs::absolute(_args.get<std::string>("--adios_conf"), ec);
 
             if (ec) {
-                if (rank == cs::mpi_root) {
+                if (mpi_rank == cs::mpi_root) {
                     std::cerr << "  ├─Cannot resolve output file path '" << _args.get<std::string>("--output") << "' due to error with code: " << ec.value() << std::endl;
                     std::cerr << "  └─Message: " << ec.message() << std::endl;
                 }
@@ -219,81 +220,50 @@ namespace mdn{
             }
             if (!fs::exists(args.adios_conf, ec)) {
                 if (ec) {
-                    if (rank == cs::mpi_root) {
+                    if (mpi_rank == cs::mpi_root) {
                         std::cerr << "  ├─Can not check distribution file '" << args.outfile.string() << "' existense. Error code: " << ec.value() << std::endl;
                         std::cerr << "  └─Message: " << ec.message() << std::endl;
                     }
                     throw std::runtime_error("Can not check distribution file existense.");
                 } else {
-                    if (rank == cs::mpi_root) {
+                    if (mpi_rank == cs::mpi_root) {
                         std::cerr << "  ├─Distribution file '" << args.outfile.string() << "' does not exists. Error code: " << ec.value() << std::endl;
                         std::cerr << "  └─Message: " << ec.message() << std::endl;
                     }
                     throw std::runtime_error("Distribution file does not exists.");
                 }
             }
-            if (rank == cs::mpi_root) std::cout << "  ├─ADIOS2 configuration: " << args.adios_conf.string() << std::endl;
+            if (mpi_rank == cs::mpi_root) std::cout << "  ├─ADIOS2 configuration: " << args.adios_conf.string() << std::endl;
         } else {
-            if (rank == cs::mpi_root) std::cout << "  ├─ADIOS2 configuration: builtin" << std::endl;
+            if (mpi_rank == cs::mpi_root) std::cout << "  ├─ADIOS2 configuration: builtin" << std::endl;
         }
 
-        if (_args.is_used("--output")) {
-            args.outfile_base = fs::absolute(_args.get<std::string>("--output"), ec);
-
-            if (ec) {
-                if (rank == cs::mpi_root) {
-                    std::cerr << "  ├─Cannot resolve output file path '" << _args.get<std::string>("--output") << "' due to error with code: " << ec.value() << std::endl;
-                    std::cerr << "  └─Message: " << ec.message() << std::endl;
-                }
-                throw std::runtime_error("Cannot resolve specified output file basename due to error");
-            }
-        } else {
-            args.outfile_base = cwd / folders::post_process_folder / files::output_datafile_basename;
-            if (fs::exists(args.outfile_base, ec)) {
-                if (ec) {
-                    if (rank == cs::mpi_root) {
-                        std::cerr << "  ├─Can not check output file '" << args.outfile_base.string() << "' existense. Error code: " << ec.value() << std::endl;
-                        std::cerr << "  └─Message: " << ec.message() << std::endl;
-                    }
-                    throw std::runtime_error("Can not check output file existense.");
-                } else {
-                    if (rank == cs::mpi_root) {
-                        std::cerr << "  ├─Default output file '" << args.outfile_base.string() << "' already exists. Error code: " << ec.value() << std::endl;
-                        std::cerr << "  └─Message: " << ec.message() << std::endl;
-                    }
-                    throw std::runtime_error("Default output file already exists.");
-                }
-            }
-        }
-        if (rank == cs::mpi_root) std::cout << "  ├─Template output file path: " << args.outfile_base.string() << std::endl;
-        args.outfile = args.outfile_base.parent_path() / (args.outfile_base.filename().string() + "." + std::to_string(rank));
-
-        fs::path ofpp = args.outfile.parent_path();
-        if (rank == cs::mpi_root){
-            if (!fs::exists(ofpp, ec)) {
+        args.outfile_base = cwd / folders::post_process_folder;
+        if (mpi_rank == cs::mpi_root){
+            if (!fs::exists(args.outfile_base, ec)) {
                 if (!ec) {
-                    if(!fs::create_directories(ofpp, ec)) {
-                        std::cerr << "  ├─Cannot create non-existent post-processing directory(ies): " << ofpp.string() << std::endl;
+                    if(!fs::create_directories(args.outfile_base, ec)) {
+                        std::cerr << "  ├─Cannot create non-existent post-processing directory(ies): " << args.outfile_base.string() << std::endl;
                         std::cerr << "  ├─Error code: " << ec.value() << std::endl;
                         std::cerr << "  └─Message: "    << ec.message() << std::endl;
-                        throw std::runtime_error("Cannot create non-existent post-processing directory: " + ofpp.string());
+                        throw std::runtime_error("Cannot create non-existent post-processing directory: " + args.outfile_base.string());
                     }
-                    std::cout << "  ├─Created post-processing directory(ies): " << ofpp.string() << std::endl;
+                    std::cout << "  ├─Created post-processing directory(ies): " << args.outfile_base.string() << std::endl;
                 } else {
-                    std::cerr << "  ├─Cannot check post-processing directory(ies) existense: " << ofpp.string() << std::endl;
+                    std::cerr << "  ├─Cannot check post-processing directory(ies) existense: " << args.outfile_base.string() << std::endl;
                     std::cerr << "  ├─Error code: " << ec.value() << std::endl;
                     std::cerr << "  └─Message: " << ec.message() << std::endl;
-                    throw std::runtime_error("Cannot check post-processing directory existense: " + ofpp.string());
+                    throw std::runtime_error("Cannot check post-processing directory existense: " + args.outfile_base.string());
                 }
             }
         }
 
-        if (_args["--cache"] == true){
-            args.cache = true;
-            if (rank == cs::mpi_root) std::cout << "  ├─Cache enabled" << std::endl;
-        }
+        args.outfile = args.outfile_base / ("data.bp." + std::to_string(mpi_rank));
+        args.dist_csv = args.outfile_base / (std::string(files::dist_csv) + "." + std::to_string(mpi_rank));
+        args.temp_csv = args.outfile_base / (std::string(files::temp_csv) + "." + std::to_string(mpi_rank));
+        args.data_csv = args.outfile_base / (std::string(files::comp_data) + "." + std::to_string(mpi_rank));
 
-        if (rank == cs::mpi_root) std::cout << "  └─End of parsing args" << std::endl;
+        if (mpi_rank == cs::mpi_root) std::cout << "  └─End of parsing args" << std::endl;
 
         return RETURN_CODES::OK;
     } // parse_args
@@ -338,6 +308,7 @@ namespace mdn{
             s += std::chrono::duration<long double, std::milli>(t2 - t1).count();
         }
         long double sum(){
+            if (counter == 0) return 0;
             return s / counter;
         }
         void check(){
@@ -348,12 +319,38 @@ namespace mdn{
             if (counter > 0)
                 return std::chrono::duration<long double, std::milli>(t2 - t1).count() / counter;
             else
-                return std::chrono::duration<long double, std::milli>(0).count();
+                return std::chrono::duration<long double, std::milli>(t2 - t1).count();
+        }
+        std::chrono::duration<long double, std::milli> current_dur(){
+            check();
+            if (counter > 0)
+                return std::chrono::duration<long double, std::milli>(t2 - t1) / counter;
+            else
+                return std::chrono::duration<long double, std::milli>(t2 - t1);
         }
         long double count(){
             return std::chrono::duration<long double, std::milli>(t2 - t1).count();
         }
+        // std::chrono::duration<uint64_t, std::milli> count_dur(){
+        //     return std::chrono::duration<uint64_t, std::milli>(t2 - t1).count();
+        // }
     };
+
+    std::string format_duration(std::chrono::duration<long double, std::milli> ms) {
+        std::chrono::seconds secs = std::chrono::duration_cast<std::chrono::seconds>(ms);
+        ms -= std::chrono::duration_cast<std::chrono::milliseconds>(secs);
+        std::chrono::minutes mins = std::chrono::duration_cast<std::chrono::minutes>(secs);
+        secs -= std::chrono::duration_cast<std::chrono::seconds>(mins);
+        std::chrono::hours hour = std::chrono::duration_cast<std::chrono::hours>(mins);
+        mins -= std::chrono::duration_cast<std::chrono::minutes>(hour);
+
+        return std::to_string(hour.count()) + ":" + std::to_string(mins.count()) + ":" + std::to_string(secs.count()) + ":" + std::to_string(ms.count());
+    }
+
+    void trace(spdlog::logger& logger, const char *file, int line, const std::string& mess){
+        logger.trace(mess + ": " + file + ":" + std::to_string(line));
+        logger.flush();
+    }
 
 } // namespace
 

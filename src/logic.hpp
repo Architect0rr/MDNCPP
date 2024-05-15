@@ -20,6 +20,17 @@
     #include "zip.hpp"
 #endif // !__cpp_lib_ranges_zip
 
+#ifdef __MDN_TRACE_OUT__
+    #define __MDN_TRACE__ \
+        trace(logger, __FILE__, __LINE__, "");
+    #define __MDN_TRACE_MESS__(mess) \
+        trace(logger, __FILE__, __LINE__, mess);
+#else
+    #define __MDN_TRACE__
+    #define __MDN_TRACE_MESS__(mess)
+#endif
+
+
 namespace mdn{
 
     template <typename T, uint64_t N>
@@ -74,6 +85,7 @@ namespace mdn{
         adios2::Engine writer = dataio.Open(args.outfile, adios2::Mode::Write, MPI_COMM_SELF);
         logger.debug("ADIOS2 IO DataWriter initialized");
 
+        __MDN_TRACE_MESS__("Defining variables")
         adios2::Variable<uint64_t> WvarNstep  = dataio.DefineVariable<uint64_t>("ntimestep");
         adios2::Variable<uint64_t> WvarN      = dataio.DefineVariable<uint64_t>("natoms");
         adios2::Variable<uint64_t> WvarDist   = dataio.DefineVariable<uint64_t>("dist",     {_Natoms + 1}, {0}, {_Natoms + 1}, adios2::ConstantDims);
@@ -84,6 +96,7 @@ namespace mdn{
         adios2::Variable<double>   WvarEnthr  = dataio.DefineVariable<double>  ("enthr",    {_Natoms + 1}, {0}, {_Natoms + 1}, adios2::ConstantDims);
         adios2::Variable<double>   WvarEnerg  = dataio.DefineVariable<double>  ("energ",    {_Natoms + 1}, {0}, {_Natoms + 1}, adios2::ConstantDims);
         #endif // __CALC_ENTHROPY__
+        __MDN_TRACE_MESS__("Defined variables")
 
         adios2::Variable<uint64_t> varNstep;
         adios2::Variable<uint64_t> varNatoms;
@@ -106,8 +119,12 @@ namespace mdn{
             constexpr int nprops = 9;
         #endif // __CALC_ENTHROPY__
         constexpr double rcut = 2.5;
+        logger.debug("Number of dimensions: {}", ndim);
+        logger.debug("Number of properties: {}", nprops);
+        logger.debug("rcut: {}", rcut);
 
         #ifdef __CALC_ENTHROPY__
+            __MDN_TRACE_MESS__("Initializing variables for enthropy calculations")
             constexpr size_t Nr_bins = 10;
             constexpr size_t Np_bins = 36;
             constexpr size_t Nt_bins = 18;
@@ -121,6 +138,7 @@ namespace mdn{
             constexpr std::array<double, Nr_bins> lv  = _sl_volumes(r_mesh, Np_bins, Nt_bins);
         #endif // __CALC_ENTHROPY__
 
+        __MDN_TRACE_MESS__("Initializing memory for data")
         std::unique_ptr<double[]> Atoms_buf(new double[_Natoms * nprops]);
         std::span<const double> particle_ids(Atoms_buf.get() + 0 * _Natoms, 1 * _Natoms);
         std::span<const double> cluster_ids (Atoms_buf.get() + 1 * _Natoms, 1 * _Natoms);
@@ -136,29 +154,33 @@ namespace mdn{
             std::span<const double> pes         (Atoms_buf.get() + 10 * _Natoms, 1 * _Natoms);
         #endif // __KE_PE_PRESENT__
 
+        __MDN_TRACE_MESS__("Initializing auxillary variables")
         // Main algorithm containers
-        uint64_t timestep{}, Natoms{}, Nclusters{}, size{};
-        double boxxhi{}, boxyhi{}, boxzhi{}, boxxlo{}, boxylo{}, boxzlo{}, Volume{}, total_temp{}, ke{}, pe{};
+        uint64_t timestep = 0, Natoms = 0, Nclusters = 0, size = 0;
+        double boxxhi = 0, boxyhi = 0, boxzhi = 0, boxxlo = 0, boxylo = 0, boxzlo = 0, Volume = 0, total_temp = 0, ke = 0, pe = 0;
         std::unordered_set<uint64_t> unique_cluster_ids;
         unique_cluster_ids.reserve(_Natoms);
         std::map<uint64_t, std::vector<uint64_t>> particles_by_cluster_id, cluster_ids_by_size, particles_by_size;
         std::vector<uint64_t> sizes_counts(_Natoms + 1, 0UL);
 
         #ifndef __KE_PE_PRESENT__
+            __MDN_TRACE__
             std::vector<double> kes;
             kes.reserve(_Natoms);
             #ifdef __CALC_PE__
+            __MDN_TRACE__
                 std::vector<double> pes(_Natoms, 0.0);
-                double dist{}, en{};
+                double dist = 0, en = 0;
             #endif // __CALC_PE__
         #endif // !__KE_PE_PRESENT__
 
         // std::map<uint64_t, double> temps_by_size;
         std::vector<double> temps_by_size(_Natoms + 1, 0.0);
         // std::map<uint64_t, double> particle_count_by_size, ndofs_by_size;
-
+        __MDN_TRACE__
         // Enthropy containers
         #ifdef __CALC_ENTHROPY__
+            __MDN_TRACE__
             std::vector<std::array<double, ndim>> pts; // cleared
             pts.reserve(_Natoms);
             std::vector<std::array<double, ndim>> _pts; // cleared
@@ -166,6 +188,7 @@ namespace mdn{
             std::vector<double> rho_a; // not required
             rho_a.resize(_Natoms, 0.0);
 
+            __MDN_TRACE__
             std::vector<double> rvi(_Natoms, 0.0);   // cleaning not required
             size_t r_bin_n{}, p_bin_n{}, t_bin_n{};
             double rho{}, s{}, phi{}, theta{};
@@ -177,6 +200,7 @@ namespace mdn{
                     for (size_t k = 0; k < Np_bins+1; ++k)
                         ang_bin[i][j][k].reserve(_Natoms);
             }
+            __MDN_TRACE__
             std::array<double, Nr_bins> rs;  // cleaning not required
             std::array<std::array<std::array<double, Np_bins>, Nt_bins>, Nr_bins> ang_s;  // cleaning not required
             std::array<double, Nr_bins> enth_ang({0.0}); // cleaning not required
@@ -189,7 +213,7 @@ namespace mdn{
                 // std::vector<double> pes_by_size(_Natoms + 1, 0.0); // cleared
                 std::vector<double> eng_by_size(_Natoms + 1, 0.0); // cleared
             #endif // __KE_PE_PRESENT__
-
+            __MDN_TRACE__
             // std::map<size_t, std::vector<std::pair<std::array<double, 3>, std::array<double, Nr_bins>>>> stats;
             // std::array<double, Nr_bins> ang_int;
             // double rr_integral=0;
@@ -200,7 +224,9 @@ namespace mdn{
 
         timer Tmisc;
         Tmisc.b();
+        __MDN_TRACE_MESS__("Initializing timers")
         #ifdef __MDN_PROFILING__
+            __MDN_TRACE__
             timer Tglobal;
             timer TPstorage;
             timer TPstep;
@@ -216,41 +242,54 @@ namespace mdn{
             TPstorage.start();
         #endif // __MDN_PROFILING__
 
-        uint64_t total_steps = 0;
+        total_steps = 0;
+        __MDN_TRACE_MESS__("Counting total steps")
         for (const auto &[storage, steps] : storages) total_steps += steps.second - steps.first;
 
+        __MDN_TRACE__
         logger.debug("Starting main loop");
-        done_steps_primary = 0;
+        uint64_t done_steps = 0;
         int storage_index = -1;
         for (const auto &[storage, steps] : storages){
+            __MDN_TRACE__
             ++storage_index;
             if (cont && storage_index < storages_to_skip) continue;
-            if (cont && steps_to_skip >= steps.first + steps.second) continue;
+            if (cont && steps_to_skip >= steps.second) continue;
             uint64_t currentStep = 0;
+            __MDN_TRACE__
             try{
+                __MDN_TRACE__
                 adios2::Engine reader = lmpsio.Open(storage, adios2::Mode::Read, MPI_COMM_SELF);
                 #ifdef __MDN_TRACE_OUT__
                     logger.trace("Open storage ({}-{}):{}", steps.first, steps.second, storage.string().c_str());
                 #endif // __MDN_TRACE_OUT__
+                __MDN_TRACE__
                 while (currentStep != steps.first) {
                     if (reader.BeginStep() == adios2::StepStatus::EndOfStream) {
                         logger.error("End of stream happened while scrolling to begin step");
                         logger.error("Storage: {}, begin: {}, end: {}", storage.string(), steps.first, steps.second);
                         throw std::logic_error("End of stream happened while scrolling to begin step");
                     }
+                    __MDN_TRACE__
                     currentStep = reader.CurrentStep();
                     reader.EndStep();
                 }
-                if (cont && steps.first < steps_to_skip)
+                __MDN_TRACE__
+                if (cont && steps.first < steps_to_skip){
+                    __MDN_TRACE__
                     while (currentStep <= steps_to_skip) {
+                        __MDN_TRACE__
                         if (reader.BeginStep() == adios2::StepStatus::EndOfStream) {
+                            __MDN_TRACE__
                             logger.error("End of stream happened while scrolling to last processed step");
                             logger.error("Storage: {}, begin: {}, end: {}", storage.string(), steps.first, steps.second);
                             throw std::logic_error("End of stream happened while scrolling to last processed step");
                         }
                         currentStep = reader.CurrentStep();
                         reader.EndStep();
+                        __MDN_TRACE__
                     }
+                }
 
                 #ifdef __MDN_TRACE_OUT__
                     logger.trace("Skipped {} steps", currentStep);
@@ -269,7 +308,8 @@ namespace mdn{
                     logger.trace("Written current state to start-stop file");
                 #endif // __MDN_TRACE_OUT__
 
-                while (currentStep != steps.first + steps.second) {
+                __MDN_TRACE__
+                while (currentStep < steps.second) {
                     if (reader.BeginStep() == adios2::StepStatus::EndOfStream){
                         #ifdef __MDN_TRACE_OUT__
                             logger.trace("EOS reached");
@@ -277,6 +317,7 @@ namespace mdn{
                         break;
                     }
 
+                    __MDN_TRACE__
                     currentStep = reader.CurrentStep();
 
                     varNstep  = lmpsio.InquireVariable<uint64_t>(std::string(lcf::timestep));
@@ -288,12 +329,16 @@ namespace mdn{
                     varBoxylo = lmpsio.InquireVariable<double>  (std::string(lcf::boxylo  ));
                     varBoxzlo = lmpsio.InquireVariable<double>  (std::string(lcf::boxzlo  ));
                     varAtoms  = lmpsio.InquireVariable<double>  (std::string(lcf::atoms   ));
+                    __MDN_TRACE__
 
                     if (!(varNstep && varNatoms && varBoxxhi && varBoxyhi && varBoxzhi && varBoxxlo && varBoxylo && varBoxzlo && varAtoms)){
+                        __MDN_TRACE__
                         reader.EndStep();
                         logger.error("Error on read variables at step {}, continuing to next step", currentStep);
                         continue;
                     }
+
+                    __MDN_TRACE__
                     #ifdef __MDN_TRACE_OUT__
                         adios2::Dims vAtomsShape = varAtoms.Shape();
                         logger.trace("_Natoms: {}", _Natoms);
@@ -305,6 +350,7 @@ namespace mdn{
                         logger.trace("Inquired variables");
                     #endif // __MDN_TRACE_OUT__
 
+                    __MDN_TRACE__
                     #ifdef __MDN_PROFILING__
                         TADIOS_get_data.b();
                     #endif // __MDN_PROFILING__
@@ -325,6 +371,7 @@ namespace mdn{
                     #ifdef __MDN_TRACE_OUT__
                         logger.trace("Got data");
                     #endif // __MDN_TRACE_OUT__
+                    __MDN_TRACE__
 
                     Volume = std::abs((boxxhi - boxxlo) * (boxyhi - boxylo) * (boxzhi - boxzlo));
 
@@ -334,7 +381,7 @@ namespace mdn{
 
                     Nclusters = unique_cluster_ids.size();
 
-
+                    __MDN_TRACE__
                     size = 0;
                     for (const uint64_t &i : unique_cluster_ids)
                     {
@@ -342,20 +389,24 @@ namespace mdn{
                         cluster_ids_by_size[size].push_back(i);
                         particles_by_size[size].insert(particles_by_size[size].end(), particles_by_cluster_id[i].begin(), particles_by_cluster_id[i].end());
                     }
+                    __MDN_TRACE__
 
                     for (const auto &[k, v] : cluster_ids_by_size)
                     {
                         sizes_counts[k] = v.size();
                         if (k > max_cluster_size) max_cluster_size = k;
                     }
+                    __MDN_TRACE__
 
                     #ifdef __CALC_PE__
                         #ifdef __MDN_PROFILING__
                             Tcalc_PE.b();
                         #endif // !__MDN_PROFILING__
+                        __MDN_TRACE__
                         for (size_t i = 0; i < Natoms; ++i)
                             for (size_t j = i; j < Natoms; ++j)
                             {
+                                __MDN_TRACE__
                                 dist = std::sqrt(std::pow(xs[i] - xs[j], 2) + std::pow(ys[i] - ys[j], 2) + std::pow(zs[i] - zs[j], 2));
                                 if (dist < rcut){
                                     en = 4*(std::pow(dist, -12) - std::pow(dist, -6));
@@ -363,10 +414,12 @@ namespace mdn{
                                     pes[j] += en;
                                 }
                             }
+                        __MDN_TRACE__
                         #ifdef __MDN_PROFILING__
                             Tcalc_PE.e();
                         #endif // !__MDN_PROFILING__
                     #endif // __CALC_PE__
+                    __MDN_TRACE__
 
                     total_temp = 0;
                     #ifndef __KE_PE_PRESENT__
@@ -380,12 +433,15 @@ namespace mdn{
                                 total_temp += kes.back();
                         }
                     #else
+                        __MDN_TRACE__
                         for (const double& ke: kes) total_temp += ke;
                     #endif // !__KE_PE_PRESENT__
                     total_temp = 2 * total_temp / ((Natoms - 1) * ndim);
 
+                    __MDN_TRACE__
                     for (const auto &[size, v] : particles_by_size)
                     {
+                        __MDN_TRACE__
                         ke = 0;
                         #ifdef __KE_PE_PRESENT__
                             pe = 0;
@@ -409,6 +465,7 @@ namespace mdn{
                         // temps_by_size.emplace(k, std::pow(ke / ((v.size() - 1) * ndim), 2));
                     }
 
+                    __MDN_TRACE__
                     #ifdef __CALC_ENTHROPY__
                         #ifdef __MDN_PROFILING__
                             Tcalc_enthropy.b();
@@ -533,6 +590,7 @@ namespace mdn{
                         #endif // !__MDN_PROFILING__
                     #endif // __CALC_ENTHROPY__
 
+                    __MDN_TRACE__
                     #ifdef __MDN_PROFILING__
                         TADIOS_write_data.b();
                     #endif // !__MDN_PROFILING__
@@ -553,6 +611,7 @@ namespace mdn{
                     #ifdef __MDN_PROFILING__
                         TADIOS_write_data.e();
                     #endif // !__MDN_PROFILING__
+                    __MDN_TRACE__
 
                     #ifdef __MDN_PROFILING__
                         Tcleaning.b();
@@ -563,18 +622,21 @@ namespace mdn{
                     particles_by_size.clear();
                     std::fill(sizes_counts.begin(), sizes_counts.end(), 0);
                     std::fill(temps_by_size.begin(), temps_by_size.end(), 0.0);
+                    kes.clear();
+                    __MDN_TRACE__
 
                     #ifdef __CALC_ENTHROPY__
+                        __MDN_TRACE__
                         std::fill(enth_by_size.begin(), enth_by_size.end(), 0.0);
                         std::fill(eng_by_size.begin(), eng_by_size.end(), 0.0);
                         // std::fill(kes_by_size.begin(), kes_by_size.end(), 0.0);
                         // std::fill(pes_by_size.begin(), pes_by_size.end(), 0.0);
                         #ifndef __KE_PE_PRESENT__
-                            kes.clear();
                             pes.clear();
                         // #else
                         //     std::fill(f_energy.begin(), f_energy.end(), 0.0);
                         #endif // !__KE_PE_PRESENT__
+                        __MDN_TRACE__
                     #endif // __CALC_ENTHROPY__
 
                     #ifdef __MDN_PROFILING__
@@ -582,16 +644,18 @@ namespace mdn{
                         TPstep.cutoff();
                     #endif // __MDN_PROFILING__
 
-                    ++done_steps_primary;
+                    __MDN_TRACE__
+                    ++done_steps;
                     Tmisc.check();
                     if (Tmisc.count() > 60*1000){
+                        __MDN_TRACE__
                         MPI_File_iwrite_at(fh, off + sizeof(int), &currentStep, 1, MPI_UINT64_T, &req);
                         Tmisc.b();
-                        logger.debug("Progress:     {}%", (static_cast<long double>(done_steps_primary) / total_steps)*100.0);
-
+                        logger.debug("Progress:     {}% ({}/{})", (static_cast<long double>(done_steps) / total_steps)*100.0, done_steps, total_steps);
+                        logger.debug("Storage:      {}% ({}/{})", (static_cast<long double>(currentStep-steps.first) / (steps.second - steps.first))*100.0, currentStep, (steps.first + steps.second));
+                        __MDN_TRACE__
                         #ifdef __MDN_PROFILING__
-                            logger.info("###################");
-                            logger.info("Profiling:");
+                            logger.info("Total wall: {} ms", format_duration(Tglobal.current_dur()));
                             logger.info("├─Per storage: {} ms", TPstorage.current());
                             logger.info("└─Per step:    {} ms", TPstep.current());
                             logger.info("  ├─Input:       {} ms", TADIOS_get_data.sum());
@@ -608,13 +672,16 @@ namespace mdn{
                                 auxtime -= Tcalc_enthropy.sum();
                             #endif // __CALC_ENTHROPY__
                             logger.info("  └─Not stated   {} ms", auxtime);
-                            logger.info("###################");
                         #endif // !__MDN_PROFILING__
+                        __MDN_TRACE__
                     }
                     logger.flush();
+                    __MDN_TRACE__
                 }
 
+                __MDN_TRACE__
                 reader.Close();
+                __MDN_TRACE__
             }catch (std::logic_error& e){
                 logger.error("Some std::logic_error happened on storage {}, steps: ()", storage.string(), steps.first, steps.second);
                 logger.error(e.what());
@@ -631,15 +698,19 @@ namespace mdn{
             #ifdef __MDN_PROFILING__
                 TPstorage.cutoff();
             #endif // !__MDN_PROFILING__
+            __MDN_TRACE__
 
             MPI_File_write_at(fh, off, &storage_index, 1, MPI_INT, &status);
             MPI_File_write_at(fh, off + sizeof(int), &currentStep, 1, MPI_UINT64_T, &status);
             logger.info("End storage: {}", storage.string());
+            __MDN_TRACE__
         }
 
+        __MDN_TRACE__
         writer.Close();
         logger.debug("Closed writer");
 
+        __MDN_TRACE__
         #ifdef __MDN_PROFILING__
             TPstep.check();
             TPstorage.check();
@@ -648,6 +719,7 @@ namespace mdn{
             logger.info("Final profiling results: {} ms per step, {} ms per storage", TPstep.current(), TPstorage.current());
             logger.info("Profiling: {} ms total wall time", Tglobal.current());
         #endif // !__MDN_PROFILING__
+        __MDN_TRACE__
 
         MPI_File_close(&fh);
         logger.info("End of processing");
