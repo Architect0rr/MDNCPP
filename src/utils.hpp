@@ -7,13 +7,17 @@
 #include <span>
 
 #include "argparse/argparse.hpp"
-
 #include "spdlog/spdlog.h"
+#include "spdlog/sinks/stdout_color_sinks.h"
+#include "spdlog/sinks/basic_file_sink.h"
 
 #include "MDN.hpp"
 #include "constants.hpp"
 
 namespace mdn{
+    extern spdlog::logger logger;
+    extern std::shared_ptr<spdlog::sinks::stdout_color_sink_mt> console_sink;
+    extern std::shared_ptr<spdlog::sinks::basic_file_sink_mt> file_sink;
     namespace fs = std::filesystem;
 
     class existing_string_buf : public std::streambuf {

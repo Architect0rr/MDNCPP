@@ -21,6 +21,7 @@
 #define __MDN_PROFILING__
 
 namespace mdn{
+    extern spdlog::logger logger;
 
     namespace props{
 
@@ -235,10 +236,10 @@ namespace mdn{
                 #ifdef __MDN_PROFILING__
                     TCSVWrite.b();
                 #endif // __MDN_PROFILING__
-                dist_csv << ntimestep;
+                dist_csv.write(ntimestep);
                 dist_csv.write(dist_view);
-                temp_csv << ntimestep;
-                temp_csv << total_temp;
+                temp_csv.write(ntimestep);
+                temp_csv.write(total_temp);
                 temp_csv.write(temp_view);
                 #ifdef __MDN_PROFILING__
                     TCSVWrite.e();

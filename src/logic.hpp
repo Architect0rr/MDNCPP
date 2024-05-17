@@ -10,6 +10,7 @@
 
 #include "adios2.h"
 #include "mpi.h"
+
 #include "enums.hpp"
 #include "constants.hpp"
 #include "config.hpp"
@@ -32,6 +33,7 @@
 
 
 namespace mdn{
+    extern spdlog::logger logger;
 
     template <typename T, uint64_t N>
     constexpr std::array<T, N> _linspace(T start, T stop){
@@ -69,21 +71,20 @@ namespace mdn{
         }
 
         adios2::ADIOS adios;
-        if (args.adios_conf.string().length() > 0)
+        // if (args.adios_conf.string().length() > 0)
         adios = adios2::ADIOS(args.adios_conf, MPI_COMM_SELF);
-        else adios = adios2::ADIOS(MPI_COMM_SELF);
+        // else adios = adios2::ADIOS(MPI_COMM_SELF);
 
         logger.debug("ADIOS2 initialized");
         adios2::IO dataio   = adios.DeclareIO("DataWriter");
         adios2::IO lmpsio   = adios.DeclareIO("LAMMPSReader");
-        if (!(args.adios_conf.string().length() > 0)){
+        // if (!(args.adios_conf.string().length() > 0)){
             dataio.SetEngine("BP4");
+            dataio.AddTransport("File", {{"Library", "posix"}});
             lmpsio.SetEngine("BP4");
-        }
+            lmpsio.AddTransport("File", {{"Library", "posix"}});
+        // }
         logger.debug("ADIOS2 IO initialized");
-
-        adios2::Engine writer = dataio.Open(args.outfile, adios2::Mode::Write, MPI_COMM_SELF);
-        logger.debug("ADIOS2 IO DataWriter initialized");
 
         __MDN_TRACE_MESS__("Defining variables")
         adios2::Variable<uint64_t> WvarNstep  = dataio.DefineVariable<uint64_t>("ntimestep");
@@ -97,6 +98,9 @@ namespace mdn{
         adios2::Variable<double>   WvarEnerg  = dataio.DefineVariable<double>  ("energ",    {_Natoms + 1}, {0}, {_Natoms + 1}, adios2::ConstantDims);
         #endif // __CALC_ENTHROPY__
         __MDN_TRACE_MESS__("Defined variables")
+        adios2::Engine writer = dataio.Open(args.outfile, adios2::Mode::Write, MPI_COMM_SELF);
+        logger.debug("ADIOS2 IO DataWriter initialized");
+        writer.LockWriterDefinitions();
 
         adios2::Variable<uint64_t> varNstep;
         adios2::Variable<uint64_t> varNatoms;
@@ -109,18 +113,18 @@ namespace mdn{
         adios2::Variable<double>   varAtoms;
 
         constexpr int ndim = 3;
-        #ifdef __CALC_ENTHROPY__
-            #ifdef __KE_PE_PRESENT__
-                constexpr int nprops = 11;
-            #else
-                constexpr int nprops = 9;
-            #endif // __KE_PE_PRESENT__
-        #else
-            constexpr int nprops = 9;
-        #endif // __CALC_ENTHROPY__
+        // #ifdef __CALC_ENTHROPY__
+        //     #ifdef __KE_PE_PRESENT__
+        //         constexpr int nprops = 11;
+        //     #else
+        //         constexpr int nprops = 9;
+        //     #endif // __KE_PE_PRESENT__
+        // #else
+        //     constexpr int nprops = 9;
+        // #endif // __CALC_ENTHROPY__
         constexpr double rcut = 2.5;
         logger.debug("Number of dimensions: {}", ndim);
-        logger.debug("Number of properties: {}", nprops);
+        logger.debug("Number of properties: {}", memory.nprops());
         logger.debug("rcut: {}", rcut);
 
         #ifdef __CALC_ENTHROPY__
@@ -138,35 +142,41 @@ namespace mdn{
             constexpr std::array<double, Nr_bins> lv  = _sl_volumes(r_mesh, Np_bins, Nt_bins);
         #endif // __CALC_ENTHROPY__
 
-        __MDN_TRACE_MESS__("Initializing memory for data")
-        std::unique_ptr<double[]> Atoms_buf(new double[_Natoms * nprops]);
-        std::span<const double> particle_ids(Atoms_buf.get() + 0 * _Natoms, 1 * _Natoms);
-        std::span<const double> cluster_ids (Atoms_buf.get() + 1 * _Natoms, 1 * _Natoms);
-        std::span<const double> masses      (Atoms_buf.get() + 2 * _Natoms, 1 * _Natoms);
-        std::span<const double> velocities  (Atoms_buf.get() + 3 * _Natoms, 3 * _Natoms);
-        #ifdef __CALC_ENTHROPY__
-            std::span<const double> xs          (Atoms_buf.get() + 6 * _Natoms, 1 * _Natoms);
-            std::span<const double> ys          (Atoms_buf.get() + 7 * _Natoms, 1 * _Natoms);
-            std::span<const double> zs          (Atoms_buf.get() + 8 * _Natoms, 1 * _Natoms);
-        #endif // __CALC_ENTHROPY__
-        #ifdef __KE_PE_PRESENT__
-            std::span<const double> kes         (Atoms_buf.get() + 9 * _Natoms, 1 * _Natoms);
-            std::span<const double> pes         (Atoms_buf.get() + 10 * _Natoms, 1 * _Natoms);
-        #endif // __KE_PE_PRESENT__
+        __MDN_TRACE_MESS__("Allocating memory for data")
+        memory.allocate(_Natoms);
+        // std::unique_ptr<double[]> Atoms_buf(new double[_Natoms * nprops]);
+        // std::span<const double> particle_ids(Atoms_buf.get() + 0 * _Natoms, 1 * _Natoms);
+        // std::span<const double> cluster_ids (Atoms_buf.get() + 1 * _Natoms, 1 * _Natoms);
+        // std::span<const double> masses      (Atoms_buf.get() + 2 * _Natoms, 1 * _Natoms);
+        // std::span<const double> velocities  (Atoms_buf.get() + 3 * _Natoms, 3 * _Natoms);
+        // #ifdef __CALC_ENTHROPY__
+        //     std::span<const double> xs          (Atoms_buf.get() + 6 * _Natoms, 1 * _Natoms);
+        //     std::span<const double> ys          (Atoms_buf.get() + 7 * _Natoms, 1 * _Natoms);
+        //     std::span<const double> zs          (Atoms_buf.get() + 8 * _Natoms, 1 * _Natoms);
+        // #endif // __CALC_ENTHROPY__
+        // #ifdef __KE_PE_PRESENT__
+        //     std::span<const double> kes         (Atoms_buf.get() + 9 * _Natoms, 1 * _Natoms);
+        //     std::span<const double> pes         (Atoms_buf.get() + 10 * _Natoms, 1 * _Natoms);
+        // #endif // __KE_PE_PRESENT__
 
         __MDN_TRACE_MESS__("Initializing auxillary variables")
         // Main algorithm containers
-        uint64_t timestep = 0, Natoms = 0, Nclusters = 0, size = 0;
-        double boxxhi = 0, boxyhi = 0, boxzhi = 0, boxxlo = 0, boxylo = 0, boxzlo = 0, Volume = 0, total_temp = 0, ke = 0, pe = 0;
+        uint64_t timestep = 0, Natoms = 0, Nclusters = 0, c_size = 0;
+        double boxxhi = 0, boxyhi = 0, boxzhi = 0, boxxlo = 0, boxylo = 0, boxzlo = 0, Volume = 0;
+        double total_temp = 0, ke = 0, pe = 0;
         std::unordered_set<uint64_t> unique_cluster_ids;
         unique_cluster_ids.reserve(_Natoms);
         std::map<uint64_t, std::vector<uint64_t>> particles_by_cluster_id, cluster_ids_by_size, particles_by_size;
         std::vector<uint64_t> sizes_counts(_Natoms + 1, 0UL);
+        std::vector<double> temps_by_size(_Natoms + 1, 0.0);
+        std::vector<double> sqvels(_Natoms, 0.0);
+        // std::map<uint64_t, double> particle_count_by_size, ndofs_by_size;
 
         #ifndef __KE_PE_PRESENT__
             __MDN_TRACE__
-            std::vector<double> kes;
-            kes.reserve(_Natoms);
+            std::vector<double> kes(_Natoms, 0);
+            // kes.reserve(_Natoms);
+
             #ifdef __CALC_PE__
             __MDN_TRACE__
                 std::vector<double> pes(_Natoms, 0.0);
@@ -174,9 +184,6 @@ namespace mdn{
             #endif // __CALC_PE__
         #endif // !__KE_PE_PRESENT__
 
-        // std::map<uint64_t, double> temps_by_size;
-        std::vector<double> temps_by_size(_Natoms + 1, 0.0);
-        // std::map<uint64_t, double> particle_count_by_size, ndofs_by_size;
         __MDN_TRACE__
         // Enthropy containers
         #ifdef __CALC_ENTHROPY__
@@ -331,7 +338,8 @@ namespace mdn{
                     varAtoms  = lmpsio.InquireVariable<double>  (std::string(lcf::atoms   ));
                     __MDN_TRACE__
 
-                    if (!(varNstep && varNatoms && varBoxxhi && varBoxyhi && varBoxzhi && varBoxxlo && varBoxylo && varBoxzlo && varAtoms)){
+                    // if (!(varNstep && varNatoms && varBoxxhi && varBoxyhi && varBoxzhi && varBoxxlo && varBoxylo && varBoxzlo && varAtoms)){
+                    if (!(varNstep && varNatoms && varAtoms)){
                         __MDN_TRACE__
                         reader.EndStep();
                         logger.error("Error on read variables at step {}, continuing to next step", currentStep);
@@ -354,15 +362,15 @@ namespace mdn{
                     #ifdef __MDN_PROFILING__
                         TADIOS_get_data.b();
                     #endif // __MDN_PROFILING__
-                    reader.Get(varNstep, timestep);
-                    reader.Get(varNatoms, Natoms);
-                    reader.Get(varBoxxhi, boxxhi);
-                    reader.Get(varBoxyhi, boxyhi);
-                    reader.Get(varBoxzhi, boxzhi);
-                    reader.Get(varBoxxlo, boxxlo);
-                    reader.Get(varBoxylo, boxylo);
-                    reader.Get(varBoxzlo, boxzlo);
-                    reader.Get(varAtoms, Atoms_buf.get());
+                    reader.Get(varNstep, &timestep, adios2::Mode::Deferred);
+                    reader.Get(varNatoms, &Natoms, adios2::Mode::Deferred);
+                    reader.Get(varBoxxhi, &boxxhi, adios2::Mode::Deferred);
+                    reader.Get(varBoxyhi, &boxyhi, adios2::Mode::Deferred);
+                    reader.Get(varBoxzhi, &boxzhi, adios2::Mode::Deferred);
+                    reader.Get(varBoxxlo, &boxxlo, adios2::Mode::Deferred);
+                    reader.Get(varBoxylo, &boxylo, adios2::Mode::Deferred);
+                    reader.Get(varBoxzlo, &boxzlo, adios2::Mode::Deferred);
+                    reader.Get(varAtoms, memory.data(), adios2::Mode::Deferred);
                     reader.PerformGets();
                     reader.EndStep();
                     #ifdef __MDN_PROFILING__
@@ -375,26 +383,33 @@ namespace mdn{
 
                     Volume = std::abs((boxxhi - boxxlo) * (boxyhi - boxylo) * (boxzhi - boxzlo));
 
-                    for (uint64_t j = 0; j < Natoms; ++j) particles_by_cluster_id[cluster_ids[j]].emplace_back(j);
+                    particles_by_cluster_id.clear();
+                    for (uint64_t i = 0; i < Natoms; ++i) particles_by_cluster_id[memory.CID()[i]].emplace_back(i);
 
-                    for (const uint64_t& i : cluster_ids) unique_cluster_ids.emplace(i);
+                    unique_cluster_ids.clear();
+                    for (const uint64_t& i : memory.CID()) unique_cluster_ids.emplace(i);
 
                     Nclusters = unique_cluster_ids.size();
 
                     __MDN_TRACE__
-                    size = 0;
+                    cluster_ids_by_size.clear();
+                    particles_by_size.clear();
+                    c_size = 0;
                     for (const uint64_t &i : unique_cluster_ids)
                     {
-                        size = particles_by_cluster_id[i].size();
-                        cluster_ids_by_size[size].push_back(i);
-                        particles_by_size[size].insert(particles_by_size[size].end(), particles_by_cluster_id[i].begin(), particles_by_cluster_id[i].end());
+                        c_size = particles_by_cluster_id[i].size();
+                        cluster_ids_by_size[c_size].push_back(i);
+                        particles_by_size[c_size].insert(particles_by_size[c_size].end(), particles_by_cluster_id[i].begin(), particles_by_cluster_id[i].end());
                     }
                     __MDN_TRACE__
 
+                    std::fill(sizes_counts.begin(), sizes_counts.end(), 0);
                     for (const auto &[k, v] : cluster_ids_by_size)
                     {
-                        sizes_counts[k] = v.size();
-                        if (k > max_cluster_size) max_cluster_size = k;
+                        if (v.size()){
+                            sizes_counts[k] = v.size();
+                            if (k > max_cluster_size) max_cluster_size = k;
+                        }
                     }
                     __MDN_TRACE__
 
@@ -423,23 +438,37 @@ namespace mdn{
 
                     total_temp = 0;
                     #ifndef __KE_PE_PRESENT__
-                        #ifndef __cpp_lib_ranges_zip
-                            for (const auto &[vel, mass] : zip<const std::span<const double> &, const std::span<const double> &>(velocities, masses))
-                        #else
-                            for (const auto &[vel, mass] : std::ranges::views::zip(velocities, masses))
-                        #endif // !__cpp_lib_ranges_zip
-                        {
-                                kes.emplace_back(mass * vel*vel / 2);
-                                total_temp += kes.back();
+                        std::fill(sqvels.begin(), sqvels.end(), 0);
+                        for (size_t i = 0; i < _Natoms; ++i) {
+                            sqvels[i] += std::pow(memory.VELX()[i], 2) + std::pow(memory.VELY()[i], 2) + std::pow(memory.VELZ()[i], 2);
                         }
+
+                        std::fill(kes.begin(), kes.end(), 0);
+                        for (size_t i = 0; i < _Natoms; ++i)
+                        {
+                            kes[i] = memory.MASS()[i]*sqvels[i] / 2;
+                            total_temp += kes[i];
+                        }
+
+                        // #ifndef __cpp_lib_ranges_zip
+                        //     for (const auto &[vel, mass] : zip<const std::span<const double> &, const std::span<const double> &>(velocities, masses))
+                        // #else
+                        //     for (const auto &[vel, mass] : std::ranges::views::zip(velocities, masses))
+                        // #endif // !__cpp_lib_ranges_zip
+                        // {
+                        //         kes.emplace_back(mass * vel*vel / 2);
+                        //         total_temp += kes.back();
+                        // }
                     #else
                         __MDN_TRACE__
                         for (const double& ke: kes) total_temp += ke;
                     #endif // !__KE_PE_PRESENT__
                     total_temp = 2 * total_temp / ((Natoms - 1) * ndim);
+                    // logger.debug(total_temp);
 
                     __MDN_TRACE__
-                    for (const auto &[size, v] : particles_by_size)
+                    std::fill(temps_by_size.begin(), temps_by_size.end(), 0.0);
+                    for (const auto &[c_size, v] : particles_by_size)
                     {
                         __MDN_TRACE__
                         ke = 0;
@@ -461,8 +490,7 @@ namespace mdn{
 
                         // particle_count_by_size = v.size();
                         // ndofs_by_size[k] = (v.size() - 1) * ndim;
-                        temps_by_size[size] = 2 * ke / ((v.size() - 1) * ndim);
-                        // temps_by_size.emplace(k, std::pow(ke / ((v.size() - 1) * ndim), 2));
+                        temps_by_size[c_size] = 2 * ke / ((v.size() - 1) * ndim);
                     }
 
                     __MDN_TRACE__
@@ -595,34 +623,22 @@ namespace mdn{
                         TADIOS_write_data.b();
                     #endif // !__MDN_PROFILING__
                     writer.BeginStep();
-                    writer.Put(WvarNstep, timestep);
-                    writer.Put(WvarDist,   sizes_counts.data());
-                    writer.Put(WvarVol,   Volume);
-                    writer.Put(WvarN,     Natoms);
-                    writer.Put(WvarTTemp, total_temp);
-                    writer.Put(WvarTemps,  temps_by_size.data());
+                    writer.Put(WvarNstep, &timestep);
+                    writer.Put(WvarDist,  sizes_counts.data());
+                    writer.Put(WvarVol,   &_Volume);
+                    writer.Put(WvarN,     &Natoms);
+                    writer.Put(WvarTTemp, &total_temp);
+                    writer.Put(WvarTemps, temps_by_size.data());
                     #ifdef __CALC_ENTHROPY__
                         writer.Put(WvarEnthr,  enth_by_size.data());
                         writer.Put(WvarEnerg,  eng_by_size.data());
                     #endif // __CALC_ENTHROPY__
-                    writer.PerformPuts();
+                    // writer.PerformPuts();
                     // writer.PerformDataWrite();
                     writer.EndStep();
                     #ifdef __MDN_PROFILING__
                         TADIOS_write_data.e();
                     #endif // !__MDN_PROFILING__
-                    __MDN_TRACE__
-
-                    #ifdef __MDN_PROFILING__
-                        Tcleaning.b();
-                    #endif // !__MDN_PROFILING__
-                    unique_cluster_ids.clear();
-                    particles_by_cluster_id.clear();
-                    cluster_ids_by_size.clear();
-                    particles_by_size.clear();
-                    std::fill(sizes_counts.begin(), sizes_counts.end(), 0);
-                    std::fill(temps_by_size.begin(), temps_by_size.end(), 0.0);
-                    kes.clear();
                     __MDN_TRACE__
 
                     #ifdef __CALC_ENTHROPY__
@@ -640,7 +656,6 @@ namespace mdn{
                     #endif // __CALC_ENTHROPY__
 
                     #ifdef __MDN_PROFILING__
-                        Tcleaning.e();
                         TPstep.cutoff();
                     #endif // __MDN_PROFILING__
 
@@ -662,9 +677,9 @@ namespace mdn{
                             logger.info("  ├─Output:      {} ms", TADIOS_write_data.sum());
                             logger.info("  ├─Calc PE:     {} ms", Tcalc_PE.sum());
                             logger.info("  ├─Calc ENTH:   {} ms", Tcalc_enthropy.sum());
-                            logger.info("  ├─Cleaning:    {} ms", Tcleaning.sum());
+                            // logger.info("  ├─Cleaning:    {} ms", Tcleaning.sum());
 
-                            double auxtime = TPstep.current() - TADIOS_get_data.sum() - TADIOS_write_data.sum() - Tcleaning.sum();
+                            double auxtime = TPstep.current() - TADIOS_get_data.sum() - TADIOS_write_data.sum();  // - Tcleaning.sum();
                             #ifdef __CALC_PE__
                                 auxtime -= Tcalc_PE.sum();
                             #endif // __CALC_PE__

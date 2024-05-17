@@ -11,6 +11,7 @@
 #include "MDN.hpp"
 
 namespace mdn {
+    extern spdlog::logger logger;
 
     using json = nlohmann::json;
     namespace fs = std::filesystem;
@@ -58,11 +59,11 @@ namespace mdn {
         int count{};
         while (!ncw.empty()){
             for (const int i : ncw){
-                MPI_Iprobe(i, MPI_TAGS::STOR, wcomm, &flag, &status);
+                MPI_Iprobe(i, static_cast<int>(MPI_TAGS::STOR), wcomm, &flag, &status);
                 if (flag){
                     MPI_Get_count(&status, MPI_CHAR, &count);
                     char* buf = new char[count];
-                    MPI_Recv(buf, count, MPI_CHAR, i, MPI_TAGS::STOR, wcomm, &status);
+                    MPI_Recv(buf, count, MPI_CHAR, i, static_cast<int>(MPI_TAGS::STOR), wcomm, &status);
                     storages.emplace(i, std::string(buf, count));
                     delete[] buf;
                     flag = 0;

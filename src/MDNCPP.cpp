@@ -15,8 +15,12 @@
 #include "setup.hpp"
 #include "logic.hpp"
 #include "stage2.hpp"
+#include "memory.hpp"
 
 namespace mdn{
+    spdlog::logger logger = spdlog::logger("default");
+    std::shared_ptr<spdlog::sinks::stdout_color_sink_mt> console_sink;
+    std::shared_ptr<spdlog::sinks::basic_file_sink_mt> file_sink;
 
     namespace fs = std::filesystem;
 
@@ -48,11 +52,23 @@ namespace mdn{
         #endif // __MDN_TRACE_OUT__
 
         json data = parse_json(cwd / files::data, "Datafile");
+        json props_json;
         if (data.contains(fields::Natoms)) _Natoms = data.at(fields::Natoms).get<uint64_t>();
-        else throw std::runtime_error("Datafile does not contains '" + std::string(fields::Natoms) + "' field");
+        else throw std::runtime_error("Datafile does not contain '" + std::string(fields::Natoms) + "' field");
+        if (data.contains(fields::Volume)) _Volume = data.at(fields::Volume).get<double>();
+        else throw std::runtime_error("Datafile does not contain '" + std::string(fields::Volume) + "' field");
+        if (data.contains(fields::propspec)) props_json = data.at(fields::propspec);
+        else throw std::runtime_error("Datafile does not contain '" + std::string(fields::propspec) + "' field");
+
+        logger.debug("Parsing propspec");
+        TRY
+            memory = Memory::construct(Memory::parse_props(props_json));
+        CATCH("Error while parsing propspec")
+        logger.debug("Parsed propspec");
 
         logger.debug("Reading distribution file");
         json dist = parse_json(cwd / files::distribution, "Distribution");
+        logger.debug("Successfully read distribution file");
         std::map<int, std::map<fs::path, std::pair<int, int>>> distribution;
         logger.debug("Parsing distribution");
         TRY
@@ -207,14 +223,14 @@ int main(int argc, char **argv)
         } catch (const std::exception &e) {
             std::cerr << "Some low-level std::exception. Aborting..." << std::endl;
             std::cerr << e.what() << std::endl;
-            MPI_Abort(MPI_COMM_WORLD, mdn::RETURN_CODES::ERROR);
+            MPI_Abort(MPI_COMM_WORLD, static_cast<int>(mdn::RETURN_CODES::ERROR));
         } catch (...) {
             std::cerr << "Some low-level unknown exception. Aborting..." << std::endl;
-            MPI_Abort(MPI_COMM_WORLD, mdn::RETURN_CODES::ERROR);
+            MPI_Abort(MPI_COMM_WORLD, static_cast<int>(mdn::RETURN_CODES::ERROR));
         }
     } else {
         std::cerr << "It is required at least 2 processes to be runned, shutting down" << std::endl;
-        MPI_Abort(MPI_COMM_WORLD, mdn::RETURN_CODES::ERROR);
+        MPI_Abort(MPI_COMM_WORLD, static_cast<int>(mdn::RETURN_CODES::ERROR));
     }
 
     MPI_Finalize();

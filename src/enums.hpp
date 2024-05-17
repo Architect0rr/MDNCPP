@@ -2,7 +2,7 @@
 #define __MDN_enums_HPP__
 
 namespace mdn{
-    enum MPI_TAGS : int
+    enum class MPI_TAGS : int
     {
         SANITY = 0,
         STATE,
@@ -10,12 +10,28 @@ namespace mdn{
         OUTFILE_EXCHANGE
     };
 
-    enum RETURN_CODES : int
+    enum class RETURN_CODES : int
     {
-        OK,
-        ERROR,
-        EXIT
+        OK = 0,
+        ERROR = 1,
+        EXIT = 2
     };
+
+    enum class PROPS : int
+    {
+        PID = 0,
+        CID = 1,
+        MASS = 2,
+        VELX = 3,
+        VELY = 4,
+        VELZ = 5,
+        X = 6,
+        Y = 7,
+        Z = 8,
+        PE = 9,
+        KE = 10,
+    };
+
 }
 
 #endif // !__MDN_enums_HPP__

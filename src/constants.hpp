@@ -38,6 +38,7 @@ namespace mdn{
         constexpr const std::string_view data_processing_folder("post_process_folder");
         constexpr const std::string_view done_steps("done_steps");
         constexpr const std::string_view total_steps("total_steps");
+        constexpr const std::string_view propspec("propspec");
     }
     namespace lcf
     {

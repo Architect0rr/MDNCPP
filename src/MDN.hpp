@@ -11,12 +11,12 @@
                   << "Some std::exception was thrown, probably aborting. Context:" << std::endl;     \
         std::cerr << mess << std::endl;                                                              \
         std::cerr << e.what() << std::endl;                                                          \
-        MPI_Abort(wcomm, RETURN_CODES::ERROR);                                                       \
+        MPI_Abort(wcomm, static_cast<int>(RETURN_CODES::ERROR));                                     \
     }catch (...){                                                                                    \
         std::cerr << "Rank: " << mpi_rank << " (" << prefix << ") "                                  \
                   << "Some unknown exception was thrown, probably aborting. Context:." << std::endl; \
         std::cerr << mess << std::endl;                                                              \
-        MPI_Abort(wcomm, RETURN_CODES::ERROR);                                                       \
+        MPI_Abort(wcomm, static_cast<int>(RETURN_CODES::ERROR));                                     \
     }
 #define CATCH(mess)                                                                     \
     }catch (std::exception & e){                                                        \
@@ -59,18 +59,15 @@
 #include <memory>
 #include <filesystem>
 
-#include "enums.hpp"
 #include "adios2.h"
 #include "nlohmann/json.hpp"
 
-#include "spdlog/spdlog.h"
-#include "spdlog/sinks/stdout_color_sinks.h"
-#include "spdlog/sinks/basic_file_sink.h"
-
 #include "config.hpp"
+#include "memory.hpp"
+#include "enums.hpp"
 
 namespace mdn{
-
+    extern spdlog::logger logger;
     namespace fs = std::filesystem;
     using json = nlohmann::json;
 
@@ -100,9 +97,9 @@ namespace mdn{
         void start(const int argc, const char ***argv);
 
     protected:
-        spdlog::logger logger = spdlog::logger("default");
-        std::shared_ptr<spdlog::sinks::stdout_color_sink_mt> console_sink;
-        std::shared_ptr<spdlog::sinks::basic_file_sink_mt> file_sink;
+        // spdlog::logger logger = spdlog::logger("default");
+        // std::shared_ptr<spdlog::sinks::stdout_color_sink_mt> console_sink;
+        // std::shared_ptr<spdlog::sinks::basic_file_sink_mt> file_sink;
 
         const int mpi_rank = 0;
         const int mpi_size = 0;
@@ -114,6 +111,7 @@ namespace mdn{
         Arguments args;
 
         uint64_t _Natoms = 0;
+        double _Volume = 0;
         uint64_t max_cluster_size = 0;
         std::map<fs::path, std::pair<int, int>> storages;
         double time_step;
@@ -125,6 +123,8 @@ namespace mdn{
         MPI_Request req;
         bool cont = false;
         int amode;
+
+        Memory memory;
 
         uint64_t done_steps_primary = 0;
         std::unique_ptr<uint64_t[]> done_steps;
