@@ -63,8 +63,8 @@ else()
 endif()
 
 set(CMAKE_STAGING_PREFIX ${PROJECT_SOURCE_DIR}/build/stage)
-set(CMAKE_CXX_FLAGS_Release "-O3")
-set(CMAKE_CXX_FLAGS_Debug "-O3 -Wall")
+set(CMAKE_CXX_FLAGS_Release "-O3 -Wall -Wextra -Wpedantic")
+set(CMAKE_CXX_FLAGS_Debug "-O3 -Wall -Wextra -Wpedantic")
 
 find_package(MPI REQUIRED)
 find_package(OpenMP REQUIRED)

@@ -144,6 +144,13 @@ namespace mdn{
 
         __MDN_TRACE_MESS__("Allocating memory for data")
         memory.allocate(_Natoms);
+        double* memptr = memory.data();
+        // auto particle_ids = memory.prop(PROPS::PID);
+        auto cluster_ids = memory.prop(PROPS::CID);
+        auto masses = memory.prop(PROPS::MASS);
+        auto velX = memory.prop(PROPS::VELX);
+        auto velY = memory.prop(PROPS::VELY);
+        auto velZ = memory.prop(PROPS::VELZ);
         // std::unique_ptr<double[]> Atoms_buf(new double[_Natoms * nprops]);
         // std::span<const double> particle_ids(Atoms_buf.get() + 0 * _Natoms, 1 * _Natoms);
         // std::span<const double> cluster_ids (Atoms_buf.get() + 1 * _Natoms, 1 * _Natoms);
@@ -381,13 +388,22 @@ namespace mdn{
                     #endif // __MDN_TRACE_OUT__
                     __MDN_TRACE__
 
+                    // logger.debug("First line:");
+                    // logger.debug("{} {} {} {} {} {} {} {} {}", memptr[0], memptr[1], memptr[2], memptr[3], memptr[4], memptr[5], memptr[6], memptr[7], memptr[8]);
+                    // logger.debug("CIDS: {}-{}", cluster_ids[0], cluster_ids[Natoms-1]);
+                    // logger.debug("MASS: {}-{}", masses[0], masses[Natoms-1]);
+                    // logger.debug("velx: {}-{}", velX[0], velX[Natoms-1]);
+                    // logger.debug("vely: {}-{}", velY[0], velY[Natoms-1]);
+                    // logger.debug("velz: {}-{}", velZ[0], velZ[Natoms-1]);
+
                     Volume = std::abs((boxxhi - boxxlo) * (boxyhi - boxylo) * (boxzhi - boxzlo));
 
                     particles_by_cluster_id.clear();
-                    for (uint64_t i = 0; i < Natoms; ++i) particles_by_cluster_id[memory.CID()[i]].emplace_back(i);
+                    for (uint64_t i = 0; i < Natoms; ++i) particles_by_cluster_id[cluster_ids[i]].emplace_back(i);
 
                     unique_cluster_ids.clear();
-                    for (const uint64_t& i : memory.CID()) unique_cluster_ids.emplace(i);
+                    for (size_t i = 0; i < Natoms; ++i) unique_cluster_ids.emplace(cluster_ids[i]);
+                    // for (const uint64_t& i : cluster_ids) unique_cluster_ids.emplace(i);
 
                     Nclusters = unique_cluster_ids.size();
 
@@ -440,13 +456,13 @@ namespace mdn{
                     #ifndef __KE_PE_PRESENT__
                         std::fill(sqvels.begin(), sqvels.end(), 0);
                         for (size_t i = 0; i < _Natoms; ++i) {
-                            sqvels[i] += std::pow(memory.VELX()[i], 2) + std::pow(memory.VELY()[i], 2) + std::pow(memory.VELZ()[i], 2);
+                            sqvels[i] += std::pow(velX[i], 2) + std::pow(velY[i], 2) + std::pow(velZ[i], 2);
                         }
 
                         std::fill(kes.begin(), kes.end(), 0);
                         for (size_t i = 0; i < _Natoms; ++i)
                         {
-                            kes[i] = memory.MASS()[i]*sqvels[i] / 2;
+                            kes[i] = masses[i]*sqvels[i] / 2;
                             total_temp += kes[i];
                         }
 
