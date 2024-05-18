@@ -108,7 +108,7 @@ namespace mdn{
         json data = parse_json(cwd / files::data, "Datafile");
         json dist = parse_json(cwd / files::distribution, "Distribution");
         std::vector<std::string> outfiles;
-        for (int i = 0; i < mpi_size; ++i) outfiles.push_back(args.outfile_base / ("data.bp." + std::to_string(mpi_rank)));
+        for (int i = 0; i < mpi_size; ++i) outfiles.push_back(args.outfile_base / ("data.bp." + std::to_string(i)));
         data[fields::outfiles] = outfiles;
         const unsigned long hash = std::hash<json>{}(dist);
         data[fields::Dhash] = hash;
@@ -147,8 +147,10 @@ namespace mdn{
         logger.debug("Gathered max cluster size");
 
         logger.debug("Gathering done steps count");
-        done_steps = std::make_unique<uint64_t[]>(mpi_size);
-        MPI_Gather(&done_steps_primary, 1, MPI_UINT64_T, done_steps.get(), 1, MPI_UINT64_T, cs::mpi_root, wcomm);
+        // done_steps = std::make_unique<uint64_t[]>(mpi_size);
+        // MPI_Gather(&done_steps_primary, 1, MPI_UINT64_T, done_steps.get(), 1, MPI_UINT64_T, cs::mpi_root, wcomm);
+        // uint64_t aas = 1;
+        // MPI_Gather(&aas, 1, MPI_UINT64_T, done_steps.get(), 1, MPI_UINT64_T, cs::mpi_root, wcomm);
         logger.debug("Gathered done steps count");
 
         logger.info("Exiting entry point. NO RETURN");
@@ -156,14 +158,15 @@ namespace mdn{
 
     void MDN_root::post_process(){
         MDN::post_process();
-        std::vector<uint64_t> _done_steps(done_steps.get(), done_steps.get() + mpi_size);
-        uint64_t overall_total_steps = 0;
-        for (const uint64_t& el : _done_steps) overall_total_steps += el;
+        // std::vector<uint64_t> _done_steps(done_steps.get(), done_steps.get() + mpi_size);
+        // uint64_t overall_total_steps = 0;
+        // for (const uint64_t& el : _done_steps) overall_total_steps += el;
 
         json ddata = parse_json(cwd / files::data, "Datafile");
         ddata[fields::maxclsize] = max_cluster_size;
+        std::vector<uint64_t> _done_steps(mpi_size, 0);  // temp
         ddata[fields::done_steps] = _done_steps;
-        ddata[fields::total_steps] = overall_total_steps;
+        ddata[fields::total_steps] = 10;  // overall_total_steps;
 
         logger.debug("Updating datafile");
         TRY

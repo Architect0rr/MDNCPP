@@ -139,12 +139,12 @@ namespace mdn{
         AK::CSV<std::ofstream&, true> temp_csv(args.temp_csv, std::ios::out);
         uint64_t to_cut = 0;
         if (args.cut > 0){
-            dist_csv.fix_columns(args.cut + 1);
-            temp_csv.fix_columns(args.cut + 2);
+            dist_csv.fix_columns(args.cut + 2);
+            temp_csv.fix_columns(args.cut + 3);
             to_cut = args.cut;
         } else {
-            dist_csv.fix_columns(max_cluster_size + 1);
-            temp_csv.fix_columns(max_cluster_size + 2);
+            dist_csv.fix_columns(max_cluster_size + 2);
+            temp_csv.fix_columns(max_cluster_size + 3);
             to_cut = max_cluster_size;
         }
 
@@ -165,8 +165,8 @@ namespace mdn{
         std::unique_ptr<uint64_t[]> dist_buff(new uint64_t[_Natoms + 1]);
         std::unique_ptr<double[]>   temp_buff(new double  [_Natoms + 1]);
 
-        const std::span<const uint64_t> dist_view(dist_buff.get(), _Natoms + 1);
-        const std::span<const double> temp_view(temp_buff.get(), _Natoms + 1);
+        const std::span<const uint64_t> dist_view(dist_buff.get(), to_cut+1);
+        const std::span<const double> temp_view(temp_buff.get(), to_cut+1);
 
         std::vector<uint64_t> sizes(_Natoms + 1);
         for (size_t i = 0; i < _Natoms + 1; i++) sizes[i] = i;

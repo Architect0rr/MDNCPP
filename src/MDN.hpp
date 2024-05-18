@@ -126,8 +126,8 @@ namespace mdn{
 
         Memory memory;
 
-        uint64_t done_steps_primary = 0;
-        std::unique_ptr<uint64_t[]> done_steps;
+        // uint64_t done_steps_primary = 0;
+        // std::unique_ptr<uint64_t[]> done_steps;
         uint64_t total_steps = 0;
         int done_stages = 0;
 

@@ -378,7 +378,7 @@ namespace mdn{
                     reader.Get(varBoxylo, &boxylo, adios2::Mode::Deferred);
                     reader.Get(varBoxzlo, &boxzlo, adios2::Mode::Deferred);
                     reader.Get(varAtoms, memory.data(), adios2::Mode::Deferred);
-                    reader.PerformGets();
+                    // reader.PerformGets();
                     reader.EndStep();
                     #ifdef __MDN_PROFILING__
                         TADIOS_get_data.e();
@@ -740,6 +740,7 @@ namespace mdn{
         __MDN_TRACE__
         writer.Close();
         logger.debug("Closed writer");
+        // done_steps_primary = done_steps;
 
         __MDN_TRACE__
         #ifdef __MDN_PROFILING__
