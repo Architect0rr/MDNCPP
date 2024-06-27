@@ -189,11 +189,15 @@ namespace mdn{
         TRY
             pre_process();
         CATCH("Error in entry point")
-        TRY
-            logger.info("Starting calculations...");
-            run();
-            logger.info("Calculations ended");
-        CATCH("Error while doing caculations")
+        if (! args.jump){
+            TRY
+                logger.info("Starting calculations...");
+                run();
+                logger.info("Calculations ended");
+            CATCH("Error while doing caculations")
+        } else {
+            logger.info("Skipping calculations due to jump enabled...");
+        }
         TRY
             sstage();
         CATCH("Error in entry point")
@@ -214,25 +218,25 @@ int main(int argc, char **argv)
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-    if (size >= 2) {
-        try {
-            if (rank == mdn::cs::mpi_root) {
-                mdn::MDN_root mmd(rank, size, MPI_COMM_WORLD, "root");
-                mmd.start(argc, const_cast<const char***>(&argv));
-            } else {
-                mdn::MDN mmd(rank, size, MPI_COMM_WORLD, "nonroot");
-                mmd.start(argc, const_cast<const char***>(&argv));
-            }
-        } catch (const std::exception &e) {
-            std::cerr << "Some low-level std::exception. Aborting..." << std::endl;
-            std::cerr << e.what() << std::endl;
-            MPI_Abort(MPI_COMM_WORLD, static_cast<int>(mdn::RETURN_CODES::ERROR));
-        } catch (...) {
-            std::cerr << "Some low-level unknown exception. Aborting..." << std::endl;
-            MPI_Abort(MPI_COMM_WORLD, static_cast<int>(mdn::RETURN_CODES::ERROR));
-        }
-    } else {
+    if (size < 2) {
         std::cerr << "It is required at least 2 processes to be runned, shutting down" << std::endl;
+        MPI_Abort(MPI_COMM_WORLD, static_cast<int>(mdn::RETURN_CODES::ERROR));
+    }
+
+    try {
+        if (rank == mdn::cs::mpi_root) {
+            mdn::MDN_root mmd(rank, size, MPI_COMM_WORLD, "root");
+            mmd.start(argc, const_cast<const char***>(&argv));
+        } else {
+            mdn::MDN mmd(rank, size, MPI_COMM_WORLD, "nonroot");
+            mmd.start(argc, const_cast<const char***>(&argv));
+        }
+    } catch (const std::exception &e) {
+        std::cerr << "Some low-level std::exception. Aborting..." << std::endl;
+        std::cerr << e.what() << std::endl;
+        MPI_Abort(MPI_COMM_WORLD, static_cast<int>(mdn::RETURN_CODES::ERROR));
+    } catch (...) {
+        std::cerr << "Some low-level unknown exception. Aborting..." << std::endl;
         MPI_Abort(MPI_COMM_WORLD, static_cast<int>(mdn::RETURN_CODES::ERROR));
     }
 

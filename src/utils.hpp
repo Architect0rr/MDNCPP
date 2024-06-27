@@ -92,6 +92,7 @@ namespace mdn{
         argparse::ArgumentParser _args = argparse::ArgumentParser("MDNCPP", __MDNCPP_VERSION__, argparse::default_arguments::help & argparse::default_arguments::version, false);
 
         _args.add_argument("-d", "--debug").help("Turn on debug").flag();
+        _args.add_argument("-j", "--jump").help("Jump to stage2").flag();
         _args.add_argument("-t", "--trace").help("Turn on trace (enables debug)").flag();
         _args.add_argument("-a", "--adios_conf").help("Path to ADIOS2 xml config file").default_value("./adios2_BP4_config.xml");
         _args.add_argument("-D", "--distribution").help("Path to distribution file").default_value("./dist.json");
@@ -180,6 +181,11 @@ namespace mdn{
         if (_args["--verbose"] == true){
             args.verbose = true;
             if (mpi_rank == cs::mpi_root) std::cout << "  ├─Enabling verbose" << std::endl;
+        }
+
+        if (_args["--jump"] == true){
+            args.jump = true;
+            if (mpi_rank == cs::mpi_root) std::cout << "  ├─Skipping main stage" << std::endl;
         }
 
         args.mode = _args.get<int>("--mode");

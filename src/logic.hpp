@@ -11,7 +11,8 @@
 #include "adios2.h"
 #include "mpi.h"
 
-#include "enums.hpp"
+// #include "enums.hpp"
+#include "ct_map.hpp"
 #include "constants.hpp"
 #include "config.hpp"
 
@@ -64,12 +65,16 @@ namespace mdn{
     void MDN::run(){
         int storages_to_skip = -1;
         uint64_t steps_to_skip = -1;
+        logger.debug("Open file");
         MPI_File_open(wcomm, wfile.string().c_str(), amode, MPI_INFO_NULL, &fh);
+        logger.debug("File open");
         if (cont){
+            logger.debug("Continuation enabled");
             MPI_File_read_at(fh, off, &storages_to_skip, 1, MPI_INT, &status);
             MPI_File_read_at(fh, off+sizeof(int), &steps_to_skip, 1, MPI_UINT64_T, &status);
         }
 
+        logger.debug("Initializing ADIOS2");
         adios2::ADIOS adios;
         // if (args.adios_conf.string().length() > 0)
         adios = adios2::ADIOS(args.adios_conf, MPI_COMM_SELF);
@@ -83,6 +88,7 @@ namespace mdn{
             dataio.AddTransport("File", {{"Library", "posix"}});
             lmpsio.SetEngine("BP4");
             lmpsio.AddTransport("File", {{"Library", "posix"}});
+            lmpsio.SetParameter("substreams", "1");
         // }
         logger.debug("ADIOS2 IO initialized");
 
@@ -146,11 +152,11 @@ namespace mdn{
         memory.allocate(_Natoms);
         double* memptr = memory.data();
         // auto particle_ids = memory.prop(PROPS::PID);
-        auto cluster_ids = memory.prop(PROPS::CID);
-        auto masses = memory.prop(PROPS::MASS);
-        auto velX = memory.prop(PROPS::VELX);
-        auto velY = memory.prop(PROPS::VELY);
-        auto velZ = memory.prop(PROPS::VELZ);
+        auto cluster_ids = memory.prop(CT::CID);
+        auto masses = memory.prop(CT::MASS);
+        auto velX = memory.prop(CT::VELX);
+        auto velY = memory.prop(CT::VELY);
+        auto velZ = memory.prop(CT::VELZ);
         // std::unique_ptr<double[]> Atoms_buf(new double[_Natoms * nprops]);
         // std::span<const double> particle_ids(Atoms_buf.get() + 0 * _Natoms, 1 * _Natoms);
         // std::span<const double> cluster_ids (Atoms_buf.get() + 1 * _Natoms, 1 * _Natoms);
@@ -345,8 +351,8 @@ namespace mdn{
                     varAtoms  = lmpsio.InquireVariable<double>  (std::string(lcf::atoms   ));
                     __MDN_TRACE__
 
-                    // if (!(varNstep && varNatoms && varBoxxhi && varBoxyhi && varBoxzhi && varBoxxlo && varBoxylo && varBoxzlo && varAtoms)){
-                    if (!(varNstep && varNatoms && varAtoms)){
+                    if (!(varNstep && varNatoms && varBoxxhi && varBoxyhi && varBoxzhi && varBoxxlo && varBoxylo && varBoxzlo && varAtoms)){
+                    // if (!(varNstep && varNatoms && varAtoms)){
                         __MDN_TRACE__
                         reader.EndStep();
                         logger.error("Error on read variables at step {}, continuing to next step", currentStep);
@@ -370,14 +376,23 @@ namespace mdn{
                         TADIOS_get_data.b();
                     #endif // __MDN_PROFILING__
                     reader.Get(varNstep, &timestep, adios2::Mode::Deferred);
+                    __MDN_TRACE__
                     reader.Get(varNatoms, &Natoms, adios2::Mode::Deferred);
+                    __MDN_TRACE__
                     reader.Get(varBoxxhi, &boxxhi, adios2::Mode::Deferred);
+                    __MDN_TRACE__
                     reader.Get(varBoxyhi, &boxyhi, adios2::Mode::Deferred);
+                    __MDN_TRACE__
                     reader.Get(varBoxzhi, &boxzhi, adios2::Mode::Deferred);
+                    __MDN_TRACE__
                     reader.Get(varBoxxlo, &boxxlo, adios2::Mode::Deferred);
+                    __MDN_TRACE__
                     reader.Get(varBoxylo, &boxylo, adios2::Mode::Deferred);
+                    __MDN_TRACE__
                     reader.Get(varBoxzlo, &boxzlo, adios2::Mode::Deferred);
-                    reader.Get(varAtoms, memory.data(), adios2::Mode::Deferred);
+                    __MDN_TRACE__
+                    reader.Get(varAtoms, memptr, adios2::Mode::Deferred);
+                    __MDN_TRACE__
                     // reader.PerformGets();
                     reader.EndStep();
                     #ifdef __MDN_PROFILING__

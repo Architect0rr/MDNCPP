@@ -84,6 +84,7 @@ namespace mdn{
         fs::path dist_csv = "";
         fs::path temp_csv = "";
         fs::path data_csv = "";
+        bool jump = false;
         // bool cache = false;
     };
 

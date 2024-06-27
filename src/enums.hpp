@@ -19,6 +19,7 @@ namespace mdn{
 
     enum class PROPS : int
     {
+        REQUIRED_BY = -2,
         PID = 0,
         CID = 1,
         MASS = 2,
